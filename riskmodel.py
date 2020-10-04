@@ -1,9 +1,7 @@
-"""
-This is a module to be used as a reference for building other modules
-"""
 import numpy as np
 import math
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+
+from sklearn.base import BaseEstimator
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import euclidean_distances
@@ -15,30 +13,15 @@ from riskslim.lattice_cpa import run_lattice_cpa
 
 
 class RiskModel(BaseEstimator):
-    """ A template estimator to be used as a reference implementation.
-    For more information regarding how to build your own estimator, read more
-    in the :ref:`User Guide <user_guide>`.
-    Parameters
-    ----------
-    demo_param : str, default='demo_param'
-        A parameter used for demonstation of how to pass and store paramters.
-    Examples
-    --------
-    >>> from skltemplate import TemplateEstimator
-    >>> import numpy as np
-    >>> X = np.arange(100).reshape(100, 1)
-    >>> y = np.zeros((100, ))
-    >>> estimator = TemplateEstimator()
-    >>> estimator.fit(X, y)
-    TemplateEstimator(demo_param='demo_param')
-    """
-    def __init__(self, sample_weights_csv_file = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False):
+
+    def __init__(self, sample_weights_csv_file = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False, threshold = 0.5):
+
         self.sample_weights_csv_file = sample_weights_csv_file
         self.data_headers = data_headers
         self.fold_csv_file = fold_csv_file
         self.settings = settings
         self.show_omitted_variables = show_omitted_variables
-        self.threshold = 0.5
+        self.threshold = threshold
 
         self.max_coefficient = params['max_coefficient']
         self.max_L0_value = params['max_L0_value']
@@ -47,22 +30,9 @@ class RiskModel(BaseEstimator):
         self.w_pos = params['w_pos']
 
     def fit_transform(self, X, y):
-        """A reference implementation of a fitting function.
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape (n_samples, n_features)
-            The training input samples.
-        y : array-like, shape (n_samples,) or (n_samples, n_outputs)
-            The target values (class labels in classification, real numbers in
-            regression).
-        Returns
-        -------
-        self : object
-            Returns self.
-        """
+
         X, y = check_X_y(X, y, accept_sparse=True)
         self.is_fitted_ = True
-        # `fit` should always return `self`
 
         # transforming data
         raw_data = np.insert(X, 0, y, axis=1)
@@ -98,7 +68,7 @@ class RiskModel(BaseEstimator):
             'variable_names': variable_names,
             'outcome_name': Y_name,
             'sample_weights': sample_weights,
-            }
+        }
 
         #load folds
         if self.fold_csv_file is not None:
@@ -128,6 +98,7 @@ class RiskModel(BaseEstimator):
         coef_set['(Intercept)'].ub = self.max_offset
         coef_set['(Intercept)'].lb = -self.max_offset
 
+        # edit contraints here
         constraints = {
             'L0_min': 0,
             'L0_max': self.max_L0_value,
@@ -136,7 +107,6 @@ class RiskModel(BaseEstimator):
 
         # fit using ltca
         model_info, mip_info, lcpa_info = run_lattice_cpa(self.data, constraints, self.settings)
-        # print_model(model_info['solution'], data)
         rho = model_info['solution']
         print_model(model_info['solution'], self.data)
 
@@ -144,10 +114,6 @@ class RiskModel(BaseEstimator):
         variable_names = self.data['variable_names']
         rho_values = np.copy(rho)
         rho_names = list(variable_names)
-
-        print(rho_values)
-
-        print("rho values %d" % len(rho_values))
 
         # removes intercept value or sets it to 0
         if '(Intercept)' in rho_names:
@@ -166,23 +132,10 @@ class RiskModel(BaseEstimator):
             self.rho_values = rho_values[selected_ind]
             self.rho_names = [rho_names[i] for i in selected_ind]
 
-        print(self.rho_values)
-        print(self.filter_mask)
-
-        #rm = RiskModel(rho_values, rho_names, intercept_val, selected_ind, filter_mask != 0)
         return self
 
     def predict(self, X):
-        """ A reference implementation of a predicting function.
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape (n_samples, n_features)
-            The training input samples.
-        Returns
-        -------
-        y : ndarray, shape (n_samples,)
-            Returns an array of ones.
-        """
+
         X = check_array(X, accept_sparse=True)
         X = X[:,self.filter_mask]
 
@@ -192,8 +145,4 @@ class RiskModel(BaseEstimator):
         for i,score in enumerate(scores):
             y[i] = round(float(1.0/(1.0 + math.exp(-(self.intercept_val + score)))) - self.threshold + 0.5)
 
-        #check_is_fitted(self, 'is_fitted_')
         return y
-
-    		
-    		
