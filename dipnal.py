@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from riskmodel import RiskModel
+import matplotlib.pyplot as plt
 
 from riskslim.helper_functions import load_data_from_csv, print_model
 from riskslim.setup_functions import get_conservative_offset
@@ -11,6 +12,7 @@ from riskslim.lattice_cpa import run_lattice_cpa
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
+from sklearn.preprocessing import StandardScaler
 
 # setup variables
 os.chdir('..')
@@ -18,13 +20,15 @@ file = 'breastcancer'
 path = os.getcwd() + '/risk-slim/examples/data/' + file + '_data.csv'
 test_size = 0.2
 
-# read data
+# read and preprocess data
 df_in  = pd.read_csv(path, float_precision='round_trip')
 X = df_in.iloc[:, 1:].values
 y = df_in.iloc[:,0].values
-X, y = shuffle(X, y, random_state=1)
+y[y == -1] = 0
+# X = StandardScaler().fit_transform(X)
 
 # split data
+X, y = shuffle(X, y, random_state=1)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=0)
 
 params = {
@@ -41,7 +45,7 @@ settings = {
     'w_pos': params['w_pos'],
 
     # LCPA Settings
-    'max_runtime': 30.0,                               # max runtime for LCPA
+    'max_runtime': 30.0,                                # max runtime for LCPA
     'max_tolerance': np.finfo('float').eps,             # tolerance to stop LCPA (set to 0 to return provably optimal solution)
     'display_cplex_progress': True,                     # print CPLEX progress on screen
     'loss_computation': 'fast',                         # how to compute the loss function ('normal','fast','lookup')
@@ -50,7 +54,7 @@ settings = {
     'round_flag': True,                                # round continuous solutions with SeqRd
     'polish_flag': True,                               # polish integer feasible solutions with DCD
     'chained_updates_flag': True,                      # use chained updates
-    'add_cuts_at_heuristic_solutions': True,            # add cuts at integer feasible solutions found using polishing/rounding
+    'add_cuts_at_heuristic_solutions': True,           # add cuts at integer feasible solutions found using polishing/rounding
 
     # Initialization
     'initialization_flag': True,                       # use initialization procedure
@@ -71,3 +75,16 @@ y_pred = rm.predict(X_test)
 print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 print("Accuracy = %.2f" % accuracy_score(y_test, y_pred))
+
+# roc auc
+y_roc_pred = rm.decision_function(X_test)
+fpr_risk, tpr_risk, treshold_risk = roc_curve(y_test, y_roc_pred)
+auc_risk = auc(fpr_risk, tpr_risk)
+
+# plotting roc curve
+plt.figure(figsize=(5, 5), dpi=100)
+plt.plot(fpr_risk, tpr_risk, linestyle='-', label='Risk Slim (auc = %0.2f)' % auc_risk)
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.show()
