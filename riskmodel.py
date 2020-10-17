@@ -23,13 +23,14 @@ class RiskModel(BaseEstimator):
         self.show_omitted_variables = show_omitted_variables
         self.threshold = threshold
 
-        self.max_coefficient = params['max_coefficient']
-        self.max_L0_value = params['max_L0_value']
-        self.max_offset = params['max_offset']
-        self.c0_value = params['c0_value']
-        self.w_pos = params['w_pos']
+        self.params = params
+        self.max_coefficient = self.params['max_coefficient']
+        self.max_L0_value = self.params['max_L0_value']
+        self.max_offset = self.params['max_offset']
+        self.c0_value = self.params['c0_value']
+        self.w_pos = self.params['w_pos']
 
-    def fit_transform(self, X, y):
+    def fit(self, X, y):
 
         X, y = check_X_y(X, y, accept_sparse=True)
         self.is_fitted_ = True

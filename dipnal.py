@@ -13,15 +13,15 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import cross_val_score
 
 # setup variables
-os.chdir('..')
-file = 'breastcancer'
-path = os.getcwd() + '/risk-slim/examples/data/' + file + '_data.csv'
+file = 'hrt.csv'
 test_size = 0.2
+n_folds = 5
 
 # read and preprocess data
-df_in  = pd.read_csv(path, float_precision='round_trip')
+df_in  = pd.read_csv(file, float_precision='round_trip')
 X = df_in.iloc[:, 1:].values
 y = df_in.iloc[:,0].values
 y[y == -1] = 0
@@ -68,17 +68,25 @@ settings = {
 
 # train model and make prediction
 rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settings)
-rm.fit_transform(X_train,y_train)
-y_pred = rm.predict(X_test)
+
+# cross validation
+#scores_risk = cross_val_score(rm, X_train, y_train, scoring="accuracy")
+#print("Risk Slim Cross Validation: %0.2f (+/- %0.2f)" % (scores_risk.mean(), scores_risk.std() * 2))
+
+# another split for parameter tunning (faster than CV-5)
+X_train1, X_train2, y_train1, y_train2 = train_test_split(X, y, test_size=test_size, random_state=0)
+
+rm.fit(X_train1,y_train1)
+y_pred = rm.predict(X_train2)
 
 # print metrics
-print(confusion_matrix(y_test, y_pred))
-print(classification_report(y_test, y_pred))
-print("Accuracy = %.2f" % accuracy_score(y_test, y_pred))
+print(confusion_matrix(y_train2, y_pred))
+print(classification_report(y_train2, y_pred))
+print("Accuracy = %.2f" % accuracy_score(y_train2, y_pred))
 
 # roc auc
-y_roc_pred = rm.decision_function(X_test)
-fpr_risk, tpr_risk, treshold_risk = roc_curve(y_test, y_roc_pred)
+y_roc_pred = rm.decision_function(X_train2)
+fpr_risk, tpr_risk, treshold_risk = roc_curve(y_train2, y_roc_pred)
 auc_risk = auc(fpr_risk, tpr_risk)
 
 # plotting roc curve
