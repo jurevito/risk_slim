@@ -81,6 +81,50 @@ def binarize_real(feature_name, k, df):
 
 	return df
 
+def binarize_interval(feature_name, k, df):
+
+	data = df[feature_name].to_numpy()
+
+	# generate limits
+	max_value = np.amax(data)
+	min_value = np.amin(data)
+	step = int((max_value - min_value) * k)
+	limits = list(range(min_value + int(max_value*0.01), max_value - int(max_value*0.01), step))
+
+	# limits per feature
+	str1 = ','.join(str(e) for e in limits)
+	print("%s_limits(interval) = %s" % (feature_name, str1))
+
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
+
+	for i,limit in enumerate(limits):
+
+		subfeature = np.array(data)
+
+		if i == 0:
+
+			# first interval
+			subfeature[subfeature <= limit] = 1
+			subfeature[subfeature > limit] = 0
+			df.insert(index, "%s <= %d" % (feature_name, limit), subfeature, True)
+
+		else:
+
+			subfeature[(subfeature <= limits[i-1]) | (subfeature > limit)] = 0
+			subfeature[(subfeature <= limit) & (subfeature > limits[i-1])] = 1
+			df.insert(index, "%d < %s <= %d" % (limits[i-1], feature_name, limit), subfeature, True)
+
+		index+=1
+
+	# last interval
+	subfeature = np.array(data)
+	subfeature[subfeature <= limits[-1]] = 0
+	subfeature[subfeature > limits[-1]] = 1
+	df.insert(index, "%d < %s" % (limits[-1], feature_name), subfeature, True)
+
+	return df
+
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
@@ -91,10 +135,10 @@ y = df.iloc[:,-1].values
 y[y == -1] = 0
 
 # binarizing features
-df = binarize_real('age', 0.2, df)
-df = binarize_real('trestbps', 0.15, df)
-df = binarize_real('chol', 0.08, df)
-df = binarize_real('thalach', 0.15, df)
+df = binarize_interval('age', 0.3, df)
+df = binarize_interval('trestbps', 0.2, df)
+df = binarize_interval('chol', 0.2, df)
+df = binarize_interval('thalach', 0.3, df)
 
 # moving target to beginning
 df.drop('target', axis=1, inplace=True)
