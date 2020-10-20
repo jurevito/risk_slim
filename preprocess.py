@@ -69,6 +69,7 @@ def binarize_greater(feature_name, k, df):
 
 	index = df.columns.get_loc(feature_name)
 	df.drop(feature_name, axis=1, inplace=True)
+	subfeatures_names = []
 	
 	for limit in limits:
 
@@ -77,9 +78,10 @@ def binarize_greater(feature_name, k, df):
 		subfeature[subfeature > limit] = 1
 
 		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
+		subfeatures_names.append("%s > %d" % (feature_name, limit))
 		index+=1
 
-	return df
+	return df, subfeatures_names
 
 def binarize_interval(feature_name, k, df):
 
@@ -97,6 +99,7 @@ def binarize_interval(feature_name, k, df):
 
 	index = df.columns.get_loc(feature_name)
 	df.drop(feature_name, axis=1, inplace=True)
+	subfeatures_names = []
 
 	for i,limit in enumerate(limits):
 
@@ -108,12 +111,14 @@ def binarize_interval(feature_name, k, df):
 			subfeature[subfeature <= limit] = 1
 			subfeature[subfeature > limit] = 0
 			df.insert(index, "%s <= %d" % (feature_name, limit), subfeature, True)
+			subfeatures_names.append("%s <= %d" % (feature_name, limit))
 
 		else:
 
 			subfeature[(subfeature <= limits[i-1]) | (subfeature > limit)] = 0
 			subfeature[(subfeature <= limit) & (subfeature > limits[i-1])] = 1
 			df.insert(index, "%d < %s <= %d" % (limits[i-1], feature_name, limit), subfeature, True)
+			subfeatures_names.append("%d < %s <= %d" % (limits[i-1], feature_name, limit))
 
 		index+=1
 
@@ -122,8 +127,9 @@ def binarize_interval(feature_name, k, df):
 	subfeature[subfeature <= limits[-1]] = 0
 	subfeature[subfeature > limits[-1]] = 1
 	df.insert(index, "%d < %s" % (limits[-1], feature_name), subfeature, True)
+	subfeatures_names.append("%d < %s" % (limits[-1], feature_name))
 
-	return df
+	return df, subfeatures_names
 
 def binarize_category(feature_name, df):
 
@@ -133,6 +139,7 @@ def binarize_category(feature_name, df):
 
 	index = df.columns.get_loc(feature_name)
 	df.drop(feature_name, axis=1, inplace=True)
+	subfeatures_names = []
 
 	for i,value in enumerate(data):
 
@@ -149,9 +156,10 @@ def binarize_category(feature_name, df):
 	for key in subfeatures.keys():
 
 		df.insert(index, key, subfeatures[key], True)
+		subfeatures_names.append(key)
 		index+=1
 
-	return df
+	return df, subfeatures_names
 
 # class1_name are 0, class2_name are 1
 def binarize_sex(feature_name, class1_name, class2_name, df):
@@ -164,7 +172,7 @@ def binarize_sex(feature_name, class1_name, class2_name, df):
 	df.insert(index, class1_name, 1 - data, True)
 	df.insert(index+1, class2_name, data, True)
 
-	return df
+	return df, [class1_name, class2_name]
 
 
 
@@ -179,7 +187,7 @@ if __name__ == "__main__":
 	y[y == -1] = 0
 
 	# binarizing features
-	df = binarize_sex('sex', 'female', 'male', df)
+	df, sex_features = binarize_sex('sex', 'female', 'male', df)
 
 	# moving target to beginning
 	df.drop('target', axis=1, inplace=True)

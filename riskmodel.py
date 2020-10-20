@@ -1,4 +1,5 @@
 import numpy as np
+import cplex as cplex
 import math
 
 from sklearn.base import BaseEstimator
@@ -9,12 +10,12 @@ from sklearn.metrics import euclidean_distances
 from riskslim.helper_functions import load_data_from_csv, check_data, print_model
 from riskslim.setup_functions import get_conservative_offset
 from riskslim.coefficient_set import CoefficientSet
-from riskslim.lattice_cpa import run_lattice_cpa
+from riskslim.lattice_cpa import setup_lattice_cpa, finish_lattice_cpa, run_lattice_cpa
 
 
 class RiskModel(BaseEstimator):
 
-    def __init__(self, sample_weights_csv_file = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False, threshold = 0.5):
+    def __init__(self, sample_weights_csv_file = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False, threshold = 0.5, op_constraints = None):
 
         self.sample_weights_csv_file = sample_weights_csv_file
         self.data_headers = data_headers
@@ -22,6 +23,7 @@ class RiskModel(BaseEstimator):
         self.settings = settings
         self.show_omitted_variables = show_omitted_variables
         self.threshold = threshold
+        self.op_constraints = op_constraints
 
         self.params = params
         self.max_coefficient = self.params['max_coefficient']
@@ -108,16 +110,43 @@ class RiskModel(BaseEstimator):
             'coef_set':coef_set,
         }
 
+        # initialize MIP for lattice CPA
+        mip_objects = setup_lattice_cpa(self.data, constraints, self.settings)
+
+        # add operational constraints
+        mip = mip_objects['mip']
+        indices = mip_objects['indices']
+        get_alpha_name = lambda var_name: 'alpha_' + str(self.data['variable_names'].index(var_name))
+        get_alpha_ind = lambda var_names: [get_alpha_name(v) for v in var_names]
+
+        # applies mutual exclusivity feature contraints
+        if self.op_constraints is not None:
+
+            names = []
+            expressions = []
+
+            for key in self.op_constraints.keys():
+                names.append("mutually_exclusive_%s" % key)
+                expressions.append(cplex.SparsePair(ind = get_alpha_ind(self.op_constraints[key]),
+                                                    val = [1.0] * len(self.op_constraints[key])))
+
+            mip.linear_constraints.add(
+                names = names,
+                lin_expr = expressions,
+                senses = ["L"] * len(self.op_constraints.keys()),
+                rhs = [1.0] * len(self.op_constraints.keys()))
+
+        mip_objects['mip'] = mip
+
         # fit using ltca
-        model_info, mip_info, lcpa_info = run_lattice_cpa(self.data, constraints, self.settings)
+        model_info, mip_info, lcpa_info = finish_lattice_cpa(self.data, constraints, mip_objects, self.settings)
         rho = model_info['solution']
+        self.model_info = model_info
+
         print_model(model_info['solution'], self.data)
         print("solver_time = %d" % model_info['solver_time'])
         print("optimality_gap = %.3f" % model_info['optimality_gap'])
 
-        self.model_info = model_info
-
-        # fitting model
         variable_names = self.data['variable_names']
         rho_values = np.copy(rho)
         rho_names = list(variable_names)

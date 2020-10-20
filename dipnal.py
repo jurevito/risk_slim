@@ -27,6 +27,25 @@ n_folds = 3
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
 
+# data preprocessing
+df  = pd.read_csv(path, float_precision='round_trip')
+X = df.iloc[:, 0:-1].values
+y = df.iloc[:,-1].values
+y[y == -1] = 0
+
+# binarizing features
+df, age_features = binarize_greater('age', 0.2, df)
+df, trestbps_features = binarize_greater('trestbps', 0.15, df)
+df, chol_features = binarize_greater('chol', 0.1, df)
+df, thalach_features = binarize_greater('thalach', 0.2, df)
+df, sex_features = binarize_sex('sex', 'female', 'male', df)
+
+df.drop('target', axis=1, inplace=True)
+df.insert(0, "target", y, True)
+
+# saving processed data
+df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
     'max_L0_value' : 8,                       # maximum model size (set as float(inf))
@@ -41,7 +60,7 @@ settings = {
     'w_pos': params['w_pos'],
 
     # LCPA Settings
-    'max_runtime': 360.0,                                # max runtime for LCPA
+    'max_runtime': 2.0,                                # max runtime for LCPA
     'max_tolerance': np.finfo('float').eps,             # tolerance to stop LCPA (set to 0 to return provably optimal solution)
     'display_cplex_progress': True,                     # print CPLEX progress on screen
     'loss_computation': 'lookup',                       # how to compute the loss function ('normal','fast','lookup')
@@ -62,34 +81,24 @@ settings = {
     'cplex_mipemphasis': 0,                             # cplex MIP strategy
 }
 
-# data preprocessing
-df  = pd.read_csv(path, float_precision='round_trip')
-X = df.iloc[:, 0:-1].values
-y = df.iloc[:,-1].values
-y[y == -1] = 0
-
-df = binarize_greater('age', 0.2, df)
-df = binarize_greater('trestbps', 0.15, df)
-df = binarize_greater('chol', 0.1, df)
-df = binarize_greater('thalach', 0.2, df)
-df = binarize_sex('sex', 'female', 'male', df)
-
-df.drop('target', axis=1, inplace=True)
-df.insert(0, "target", y, True)
-
-# saving processed data
-df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+# operation constraints
+op_constraints = {
+    'age_features' : age_features,
+    'trestbps_features' : trestbps_features,
+    'chol_features' : chol_features,
+    'thalach_features' : thalach_features,
+    'sex_features' : sex_features,
+}
 
 # preparing data
 df_in  = pd.read_csv(file, float_precision='round_trip')
 X = df_in.iloc[:, 1:].values
 y = df_in.iloc[:,0].values
-y[y == -1] = 0
 
 X, y = shuffle(X, y, random_state=1)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=0)
 
-rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settings)
+rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settings, op_constraints=op_constraints)
 
 # fitting model
 rm.fit(X_train,y_train)
@@ -105,14 +114,6 @@ y_roc_pred = rm.decision_function(X_test)
 fpr_risk, tpr_risk, treshold_risk = roc_curve(y_test, y_roc_pred)
 auc_risk = auc(fpr_risk, tpr_risk)
 
-# plotting roc curve
-plt.figure(figsize=(5, 5), dpi=100)
-plt.plot(fpr_risk, tpr_risk, linestyle='-', label='Risk Slim (auc = %0.2f)' % auc_risk)
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.legend()
-plt.show()
-
 # saving results and model info
 table1 = PrettyTable(["Parameter","Value"])
 table1.add_row(["Accuracy", "%0.2f" % accuracy_score(y_test, y_pred)])
@@ -127,12 +128,15 @@ output_file.write("\n\n!--- MODEL INFO ---!\n")
 output_file.write(str(table1))
 output_file.close()
 
+# plotting roc curve
+plt.figure(figsize=(5, 5), dpi=100)
+plt.plot(fpr_risk, tpr_risk, linestyle='-', label='Risk Slim (auc = %0.2f)' % auc_risk)
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.show()
+
 # cross validation
 # scores_risk = cross_val_score(rm, X_train, y_train, scoring="accuracy", cv=n_folds)
 # print("Risk Slim Cross Validation: %0.2f (+/- %0.2f)" % (scores_risk.mean(), scores_risk.std() * 2))
 
-# another split for parameter tunning (faster than CV-5)
-#X_train1, X_train2, y_train1, y_train2 = train_test_split(X, y, test_size=test_size, random_state=0)
-
-#rm.fit(X_train1,y_train1)
-#y_pred = rm.predict(X_train2)
