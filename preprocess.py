@@ -53,7 +53,7 @@ def binarize_real_value(feature_name, n, df):
 
 	return df
 
-def binarize_real(feature_name, k, df):
+def binarize_greater(feature_name, k, df):
 
 	data = df[feature_name].to_numpy()
 
@@ -125,24 +125,65 @@ def binarize_interval(feature_name, k, df):
 
 	return df
 
+def binarize_category(feature_name, df):
 
-os.chdir('..')
-path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
+	data = df[feature_name].to_numpy()
+	subfeatures = {}
+	n = len(data)
 
-df  = pd.read_csv(path, float_precision='round_trip')
-X = df.iloc[:, 0:-1].values
-y = df.iloc[:,-1].values
-y[y == -1] = 0
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
 
-# binarizing features
-df = binarize_interval('age', 0.3, df)
-df = binarize_interval('trestbps', 0.2, df)
-df = binarize_interval('chol', 0.2, df)
-df = binarize_interval('thalach', 0.3, df)
+	for i,value in enumerate(data):
 
-# moving target to beginning
-df.drop('target', axis=1, inplace=True)
-df.insert(0, "target", y, True)
+		if value not in subfeatures.keys():
 
-# saving processed data
-df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+			subfeatures[value] = np.zeros((n,), dtype=int)
+			subfeatures[value][i] = 1
+
+		else:
+
+			subfeatures[value][i] = 1
+
+	# insert subfeatures
+	for key in subfeatures.keys():
+
+		df.insert(index, key, subfeatures[key], True)
+		index+=1
+
+	return df
+
+# class1_name are 0, class2_name are 1
+def binarize_sex(feature_name, class1_name, class2_name, df):
+
+	data = df[feature_name].to_numpy()
+
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
+
+	df.insert(index, class1_name, 1 - data, True)
+	df.insert(index+1, class2_name, data, True)
+
+	return df
+
+
+
+if __name__ == "__main__":
+
+	os.chdir('..')
+	path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
+
+	df  = pd.read_csv(path, float_precision='round_trip')
+	X = df.iloc[:, 0:-1].values
+	y = df.iloc[:,-1].values
+	y[y == -1] = 0
+
+	# binarizing features
+	df = binarize_sex('sex', 'female', 'male', df)
+
+	# moving target to beginning
+	df.drop('target', axis=1, inplace=True)
+	df.insert(0, "target", y, True)
+
+	# saving processed data
+	df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)

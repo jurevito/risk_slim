@@ -30,6 +30,8 @@ class RiskModel(BaseEstimator):
         self.c0_value = self.params['c0_value']
         self.w_pos = self.params['w_pos']
 
+        self.model_info = {}
+
     def fit(self, X, y):
 
         X, y = check_X_y(X, y, accept_sparse=True)
@@ -110,6 +112,10 @@ class RiskModel(BaseEstimator):
         model_info, mip_info, lcpa_info = run_lattice_cpa(self.data, constraints, self.settings)
         rho = model_info['solution']
         print_model(model_info['solution'], self.data)
+        print("solver_time = %d" % model_info['solver_time'])
+        print("optimality_gap = %.3f" % model_info['optimality_gap'])
+
+        self.model_info = model_info
 
         # fitting model
         variable_names = self.data['variable_names']

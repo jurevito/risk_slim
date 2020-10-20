@@ -15,28 +15,24 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
 
+from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex
+from prettytable import PrettyTable
+
 # setup variables
-file = 'hrt.csv'
+file = 'risk_slim/hrt.csv'
+output_file = open('result.txt', 'w+')
 test_size = 0.2
-n_folds = 5
+n_folds = 3
 
-# read and preprocess data
-df_in  = pd.read_csv(file, float_precision='round_trip')
-X = df_in.iloc[:, 1:].values
-y = df_in.iloc[:,0].values
-y[y == -1] = 0
-# X = StandardScaler().fit_transform(X)
-
-# split data
-X, y = shuffle(X, y, random_state=1)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=0)
+os.chdir('..')
+path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
 
 params = {
-    'max_coefficient' : 5,
-    'max_L0_value' : 5,
-    'max_offset' : 50,
-    'c0_value' : 1e-6,
-    'w_pos' : 1.00
+    'max_coefficient' : 6,                    # value of largest/smallest coefficient
+    'max_L0_value' : 8,                       # maximum model size (set as float(inf))
+    'max_offset' : 50,                        # maximum value of offset parameter (optional)
+    'c0_value' : 1e-6,                        # L0-penalty parameter such that c0_value > 0; larger values -> sparser models; we set to a small value (1e-6) so that we get a model with max_L0_value terms
+    'w_pos' : 1.00                            # relative weight on examples with y = +1; w_neg = 1.00 (optional)
 }
 
 settings = {
@@ -45,10 +41,10 @@ settings = {
     'w_pos': params['w_pos'],
 
     # LCPA Settings
-    'max_runtime': 30.0,                                # max runtime for LCPA
+    'max_runtime': 360.0,                                # max runtime for LCPA
     'max_tolerance': np.finfo('float').eps,             # tolerance to stop LCPA (set to 0 to return provably optimal solution)
     'display_cplex_progress': True,                     # print CPLEX progress on screen
-    'loss_computation': 'fast',                         # how to compute the loss function ('normal','fast','lookup')
+    'loss_computation': 'lookup',                       # how to compute the loss function ('normal','fast','lookup')
 
     # LCPA Improvements
     'round_flag': True,                                # round continuous solutions with SeqRd
@@ -66,27 +62,47 @@ settings = {
     'cplex_mipemphasis': 0,                             # cplex MIP strategy
 }
 
-# train model and make prediction
+# data preprocessing
+df  = pd.read_csv(path, float_precision='round_trip')
+X = df.iloc[:, 0:-1].values
+y = df.iloc[:,-1].values
+y[y == -1] = 0
+
+df = binarize_greater('age', 0.2, df)
+df = binarize_greater('trestbps', 0.15, df)
+df = binarize_greater('chol', 0.1, df)
+df = binarize_greater('thalach', 0.2, df)
+df = binarize_sex('sex', 'female', 'male', df)
+
+df.drop('target', axis=1, inplace=True)
+df.insert(0, "target", y, True)
+
+# saving processed data
+df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+
+# preparing data
+df_in  = pd.read_csv(file, float_precision='round_trip')
+X = df_in.iloc[:, 1:].values
+y = df_in.iloc[:,0].values
+y[y == -1] = 0
+
+X, y = shuffle(X, y, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=0)
+
 rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settings)
 
-# cross validation
-#scores_risk = cross_val_score(rm, X_train, y_train, scoring="accuracy")
-#print("Risk Slim Cross Validation: %0.2f (+/- %0.2f)" % (scores_risk.mean(), scores_risk.std() * 2))
-
-# another split for parameter tunning (faster than CV-5)
-X_train1, X_train2, y_train1, y_train2 = train_test_split(X, y, test_size=test_size, random_state=0)
-
-rm.fit(X_train1,y_train1)
-y_pred = rm.predict(X_train2)
+# fitting model
+rm.fit(X_train,y_train)
+y_pred = rm.predict(X_test)
 
 # print metrics
-print(confusion_matrix(y_train2, y_pred))
-print(classification_report(y_train2, y_pred))
-print("Accuracy = %.2f" % accuracy_score(y_train2, y_pred))
+print(confusion_matrix(y_test, y_pred))
+print(classification_report(y_test, y_pred))
+print("Accuracy = %.3f" % accuracy_score(y_test, y_pred))
 
 # roc auc
-y_roc_pred = rm.decision_function(X_train2)
-fpr_risk, tpr_risk, treshold_risk = roc_curve(y_train2, y_roc_pred)
+y_roc_pred = rm.decision_function(X_test)
+fpr_risk, tpr_risk, treshold_risk = roc_curve(y_test, y_roc_pred)
 auc_risk = auc(fpr_risk, tpr_risk)
 
 # plotting roc curve
@@ -96,3 +112,27 @@ plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend()
 plt.show()
+
+# saving results and model info
+table1 = PrettyTable(["Parameter","Value"])
+table1.add_row(["Accuracy", "%0.2f" % accuracy_score(y_test, y_pred)])
+table1.add_row(["AUC", "%0.2f" % auc_risk])
+table1.add_row(["Bin. Method", "all greater, sex split"])
+table1.add_row(["Run Time", round(rm.model_info['solver_time'],1)])
+table1.add_row(["Max Time", settings['max_runtime']])
+table1.add_row(["Max Features", params['max_L0_value']])
+table1.add_row(["Optimality Gap", round(rm.model_info['optimality_gap'],3)])
+
+output_file.write("\n\n!--- MODEL INFO ---!\n")
+output_file.write(str(table1))
+output_file.close()
+
+# cross validation
+# scores_risk = cross_val_score(rm, X_train, y_train, scoring="accuracy", cv=n_folds)
+# print("Risk Slim Cross Validation: %0.2f (+/- %0.2f)" % (scores_risk.mean(), scores_risk.std() * 2))
+
+# another split for parameter tunning (faster than CV-5)
+#X_train1, X_train2, y_train1, y_train2 = train_test_split(X, y, test_size=test_size, random_state=0)
+
+#rm.fit(X_train1,y_train1)
+#y_pred = rm.predict(X_train2)
