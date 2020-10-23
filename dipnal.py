@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
+from sklearn.impute import KNNImputer
 
 from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex
 from prettytable import PrettyTable
@@ -23,21 +24,23 @@ file = 'risk_slim/hrt.csv'
 output_file = open('result.txt', 'w+')
 test_size = 0.2
 n_folds = 3
+max_runtime = 5.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
 
 # data preprocessing
 df  = pd.read_csv(path, float_precision='round_trip')
+
 X = df.iloc[:, 0:-1].values
 y = df.iloc[:,-1].values
 y[y == -1] = 0
 
 # binarizing features
-df, age_features = binarize_greater('age', 0.2, df)
-df, trestbps_features = binarize_greater('trestbps', 0.15, df)
-df, chol_features = binarize_greater('chol', 0.1, df)
-df, thalach_features = binarize_greater('thalach', 0.2, df)
+df, age_features = binarize_greater('age', 0.2, df, 5)
+df, trestbps_features = binarize_greater('trestbps', 0.2, df, 5) # -0.14
+df, chol_features = binarize_greater('chol', 0.15, df, 5) # -0.085
+df, thalach_features = binarize_greater('thalach', 0.1, df, 5) # good variable 0.42
 df, sex_features = binarize_sex('sex', 'female', 'male', df)
 
 df.drop('target', axis=1, inplace=True)
@@ -60,7 +63,7 @@ settings = {
     'w_pos': params['w_pos'],
 
     # LCPA Settings
-    'max_runtime': 2.0,                                # max runtime for LCPA
+    'max_runtime': max_runtime,                                # max runtime for LCPA
     'max_tolerance': np.finfo('float').eps,             # tolerance to stop LCPA (set to 0 to return provably optimal solution)
     'display_cplex_progress': True,                     # print CPLEX progress on screen
     'loss_computation': 'lookup',                       # how to compute the loss function ('normal','fast','lookup')
@@ -102,6 +105,7 @@ rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settin
 
 # fitting model
 rm.fit(X_train,y_train)
+
 y_pred = rm.predict(X_test)
 
 # print metrics
@@ -120,7 +124,7 @@ table1.add_row(["Accuracy", "%0.2f" % accuracy_score(y_test, y_pred)])
 table1.add_row(["AUC", "%0.2f" % auc_risk])
 table1.add_row(["Bin. Method", "all greater, sex split"])
 table1.add_row(["Run Time", round(rm.model_info['solver_time'],1)])
-table1.add_row(["Max Time", settings['max_runtime']])
+table1.add_row(["Max Time", max_runtime])
 table1.add_row(["Max Features", params['max_L0_value']])
 table1.add_row(["Optimality Gap", round(rm.model_info['optimality_gap'],3)])
 

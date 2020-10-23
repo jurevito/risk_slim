@@ -53,15 +53,15 @@ def binarize_real_value(feature_name, n, df):
 
 	return df
 
-def binarize_greater(feature_name, k, df):
+def binarize_greater(feature_name, k, df, base):
 
 	data = df[feature_name].to_numpy()
 
 	# generate limits
-	max_value = np.amax(data)
-	min_value = np.amin(data)
-	step = int((max_value - min_value) * k)
-	limits = list(range(min_value + int(max_value*0.01), max_value - int(max_value*0.01), step))
+	max_value = base * round(np.amax(data)/base)
+	min_value = base * round(np.amin(data)/base)
+	step = base * round(int((max_value - min_value) * k)/base)
+	limits = list(range(min_value, max_value, step))
 
 	# limits per feature
 	str1 = ','.join(str(e) for e in limits)

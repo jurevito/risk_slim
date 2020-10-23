@@ -146,6 +146,7 @@ class RiskModel(BaseEstimator):
         print_model(model_info['solution'], self.data)
         print("solver_time = %d" % model_info['solver_time'])
         print("optimality_gap = %.3f" % model_info['optimality_gap'])
+        print(rho)
 
         variable_names = self.data['variable_names']
         rho_values = np.copy(rho)
@@ -175,7 +176,7 @@ class RiskModel(BaseEstimator):
         X = check_array(X, accept_sparse=True)
         X = X[:,self.filter_mask]
 
-        scores = (np.squeeze(np.asarray(np.dot(X, self.rho_values.T)))).astype('float64')
+        scores = np.round(np.squeeze(np.asarray(np.dot(X, self.rho_values.T))))
         y = np.array(scores)
 
         for i,score in enumerate(scores):
@@ -188,7 +189,7 @@ class RiskModel(BaseEstimator):
         X = check_array(X, accept_sparse=True)
         X = X[:,self.filter_mask]
 
-        scores = (np.squeeze(np.asarray(np.dot(X, self.rho_values.T)))).astype('float64')
+        scores = np.round(np.squeeze(np.asarray(np.dot(X, self.rho_values.T))))
         y = np.array(scores)
 
         for i,score in enumerate(scores):
