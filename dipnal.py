@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from riskmodel import RiskModel
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from riskslim.helper_functions import load_data_from_csv, print_model
 from riskslim.setup_functions import get_conservative_offset
@@ -24,10 +25,10 @@ file = 'risk_slim/hrt.csv'
 output_file = open('result.txt', 'w+')
 test_size = 0.2
 n_folds = 3
-max_runtime = 5.0
+max_runtime = 1.0
 
 os.chdir('..')
-path = os.getcwd() + '/risk-slim/examples/data/' + 'heart.csv'
+path = os.getcwd() + '/risk-slim/examples/data/' + 'diabetes.csv'
 
 # data preprocessing
 df  = pd.read_csv(path, float_precision='round_trip')
@@ -36,18 +37,35 @@ X = df.iloc[:, 0:-1].values
 y = df.iloc[:,-1].values
 y[y == -1] = 0
 
-# binarizing features
-df, age_features = binarize_greater('age', 0.2, df, 5)
-df, trestbps_features = binarize_greater('trestbps', 0.2, df, 5) # -0.14
-df, chol_features = binarize_greater('chol', 0.15, df, 5) # -0.085
-df, thalach_features = binarize_greater('thalach', 0.1, df, 5) # good variable 0.42
-df, sex_features = binarize_sex('sex', 'female', 'male', df)
+# 0 to nan
+df['Glucose'] = df['Glucose'].replace(0, np.nan)
+df['BloodPressure'] = df['BloodPressure'].replace(0, np.nan)
+df['SkinThickness'] = df['SkinThickness'].replace(0, np.nan)
+df['Insulin'] = df['Insulin'].replace(0, np.nan)
+df['BMI'] = df['BMI'].replace(0, np.nan)
+df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
 
-df.drop('target', axis=1, inplace=True)
-df.insert(0, "target", y, True)
+# imputate nan values
+imputer = KNNImputer(n_neighbors=5, weights="uniform")
+imputed_df = pd.DataFrame(imputer.fit_transform(df.values))
+imputed_df.columns = df.columns
+imputed_df.index = df.index
+
+# binarizing features
+imputed_df, pregnancies_features = binarize_greater('Pregnancies', 0.3, imputed_df, 2)
+imputed_df, glucose_features = binarize_greater('Glucose', 0.1, imputed_df, 10)
+imputed_df, blood_pressure_features = binarize_greater('BloodPressure', 0.2, imputed_df, 5)
+imputed_df, skin_thickness_features = binarize_greater('SkinThickness', 0.2, imputed_df, 5)
+imputed_df, insulin_features = binarize_greater('Insulin', 0.15, imputed_df, 10)
+imputed_df, bmi_features = binarize_greater('BMI', 0.15, imputed_df, 5)
+imputed_df, age_features = binarize_greater('Age', 0.15, imputed_df, 5)
+
+imputed_df['Outcome'] = imputed_df['Outcome'].astype(int)
+imputed_df.drop('Outcome', axis=1, inplace=True)
+imputed_df.insert(0, "Outcome", y, True)
 
 # saving processed data
-df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+imputed_df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -86,11 +104,13 @@ settings = {
 
 # operation constraints
 op_constraints = {
+    'pregnancies_features' : pregnancies_features,
+    'glucose_features' : glucose_features,
+    'blood_pressure_features' : blood_pressure_features,
+    'skin_thickness_features' : skin_thickness_features,
+    'insulin_features' : insulin_features,
+    'bmi_features' : bmi_features,
     'age_features' : age_features,
-    'trestbps_features' : trestbps_features,
-    'chol_features' : chol_features,
-    'thalach_features' : thalach_features,
-    'sex_features' : sex_features,
 }
 
 # preparing data
@@ -105,7 +125,6 @@ rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settin
 
 # fitting model
 rm.fit(X_train,y_train)
-
 y_pred = rm.predict(X_test)
 
 # print metrics
