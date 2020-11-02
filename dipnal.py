@@ -17,25 +17,25 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import KNNImputer
 
-from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex
+from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex, binarize
 from prettytable import PrettyTable
 
 # setup variables
-file = 'risk_slim/hrt.csv'
 output_file = open('result.txt', 'w+')
+file = 'diabetes'
 test_size = 0.2
 n_folds = 3
-max_runtime = 1.0
+max_runtime = 3.0
 
 os.chdir('..')
-path = os.getcwd() + '/risk-slim/examples/data/' + 'diabetes.csv'
-
-# data preprocessing
+path = os.getcwd() + '/risk-slim/examples/data/' + file + '.csv'
 df  = pd.read_csv(path, float_precision='round_trip')
 
-X = df.iloc[:, 0:-1].values
+# taget variable
 y = df.iloc[:,-1].values
 y[y == -1] = 0
+df.drop('Outcome', axis=1, inplace=True)
+df.insert(0, 'Outcome', y, True)
 
 # 0 to nan
 df['Glucose'] = df['Glucose'].replace(0, np.nan)
@@ -45,27 +45,42 @@ df['Insulin'] = df['Insulin'].replace(0, np.nan)
 df['BMI'] = df['BMI'].replace(0, np.nan)
 df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
 
-# imputate nan values
-imputer = KNNImputer(n_neighbors=5, weights="uniform")
-imputed_df = pd.DataFrame(imputer.fit_transform(df.values))
-imputed_df.columns = df.columns
-imputed_df.index = df.index
+# split data
+df = shuffle(df, random_state=1)
+train_df, test_df = train_test_split(df, test_size=test_size, random_state=0)
 
-# binarizing features
-imputed_df, pregnancies_features = binarize_greater('Pregnancies', 0.3, imputed_df, 2)
-imputed_df, glucose_features = binarize_greater('Glucose', 0.1, imputed_df, 10)
-imputed_df, blood_pressure_features = binarize_greater('BloodPressure', 0.2, imputed_df, 5)
-imputed_df, skin_thickness_features = binarize_greater('SkinThickness', 0.2, imputed_df, 5)
-imputed_df, insulin_features = binarize_greater('Insulin', 0.15, imputed_df, 10)
-imputed_df, bmi_features = binarize_greater('BMI', 0.15, imputed_df, 5)
-imputed_df, age_features = binarize_greater('Age', 0.15, imputed_df, 5)
+# imputate train set
+imputer = KNNImputer(n_neighbors=4, weights="uniform")
+imputed_train = pd.DataFrame(imputer.fit_transform(train_df.values))
+imputed_train.columns = train_df.columns
+imputed_train.index = train_df.index
 
-imputed_df['Outcome'] = imputed_df['Outcome'].astype(int)
-imputed_df.drop('Outcome', axis=1, inplace=True)
-imputed_df.insert(0, "Outcome", y, True)
+# imputate test set
+imputed_test = pd.DataFrame(imputer.transform(test_df.values))
+imputed_test.columns = test_df.columns
+imputed_test.index = test_df.index
+
+# binarizing train set
+imputed_train, pregnancies_features, pregnancies_limits = binarize_greater('Pregnancies', 0.15, imputed_train, 2)
+imputed_train, glucose_features, glucose_limits = binarize_greater('Glucose', 0.08, imputed_train, 15)
+imputed_train, blood_pressure_features, blood_pressure_limits = binarize_greater('BloodPressure', 0.15, imputed_train, 5)
+imputed_train, skin_thickness_features, skin_thickness_limits = binarize_greater('SkinThickness', 0.2, imputed_train, 5)
+imputed_train, insulin_features, insulin_limits = binarize_greater('Insulin', 0.1, imputed_train, 10)
+imputed_train, bmi_features, bmi_limits = binarize_greater('BMI', 0.1, imputed_train, 4)
+imputed_train, age_features, age_limits = binarize_greater('Age', 0.15, imputed_train, 5)
+
+# binarizing test set
+imputed_test = binarize('Pregnancies', pregnancies_limits, imputed_test)
+imputed_test = binarize('Glucose', glucose_limits, imputed_test)
+imputed_test = binarize('BloodPressure', blood_pressure_limits, imputed_test)
+imputed_test = binarize('SkinThickness', skin_thickness_limits, imputed_test)
+imputed_test = binarize('Insulin', insulin_limits, imputed_test)
+imputed_test = binarize('BMI', bmi_limits, imputed_test)
+imputed_test = binarize('Age', age_limits, imputed_test)
 
 # saving processed data
-imputed_df.to_csv('risk_slim/hrt.csv', sep=',', index=False,header=True)
+imputed_train.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
+imputed_test.to_csv('risk_slim/test_data.csv', sep=',', index=False,header=True)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -114,14 +129,15 @@ op_constraints = {
 }
 
 # preparing data
-df_in  = pd.read_csv(file, float_precision='round_trip')
-X = df_in.iloc[:, 1:].values
-y = df_in.iloc[:,0].values
+df_train  = pd.read_csv('risk_slim/train_data.csv', float_precision='round_trip')
+df_test  = pd.read_csv('risk_slim/test_data.csv', float_precision='round_trip')
 
-X, y = shuffle(X, y, random_state=1)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=0)
+X_train = df_train.iloc[:, 1:].values
+y_train = df_train.iloc[:,0].values
+X_test = df_test.iloc[:, 1:].values
+y_test = df_test.iloc[:,0].values
 
-rm = RiskModel(data_headers=df_in.columns.values, params=params, settings=settings, op_constraints=op_constraints)
+rm = RiskModel(data_headers=df_train.columns.values, params=params, settings=settings, op_constraints=op_constraints)
 
 # fitting model
 rm.fit(X_train,y_train)
@@ -158,8 +174,4 @@ plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend()
 plt.show()
-
-# cross validation
-# scores_risk = cross_val_score(rm, X_train, y_train, scoring="accuracy", cv=n_folds)
-# print("Risk Slim Cross Validation: %0.2f (+/- %0.2f)" % (scores_risk.mean(), scores_risk.std() * 2))
 

@@ -81,7 +81,7 @@ def binarize_greater(feature_name, k, df, base):
 		subfeatures_names.append("%s > %d" % (feature_name, limit))
 		index+=1
 
-	return df, subfeatures_names
+	return df, subfeatures_names, limits
 
 def binarize_interval(feature_name, k, df):
 
@@ -173,6 +173,23 @@ def binarize_sex(feature_name, class1_name, class2_name, df):
 	df.insert(index+1, class2_name, data, True)
 
 	return df, [class1_name, class2_name]
+
+def binarize(feature_name, limits, df):
+
+	data = df[feature_name].to_numpy()
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
+
+	for limit in limits:
+
+		subfeature = np.array(data)
+		subfeature[subfeature <= limit] = 0
+		subfeature[subfeature > limit] = 1
+
+		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
+		index+=1
+
+	return df
 
 
 
