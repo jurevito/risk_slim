@@ -17,15 +17,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import KNNImputer
 
-from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex, binarize
+from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex, binarize, binarize_manual, binarize_limits, sec2time, riskslim_cv
 from prettytable import PrettyTable
 
 # setup variables
 output_file = open('result.txt', 'w+')
 file = 'diabetes'
 test_size = 0.2
-n_folds = 3
-max_runtime = 3.0
+n_folds = 5
+max_runtime = 3600.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file + '.csv'
@@ -61,13 +61,13 @@ imputed_test.columns = test_df.columns
 imputed_test.index = test_df.index
 
 # binarizing train set
-imputed_train, pregnancies_features, pregnancies_limits = binarize_greater('Pregnancies', 0.15, imputed_train, 2)
-imputed_train, glucose_features, glucose_limits = binarize_greater('Glucose', 0.08, imputed_train, 15)
-imputed_train, blood_pressure_features, blood_pressure_limits = binarize_greater('BloodPressure', 0.15, imputed_train, 5)
-imputed_train, skin_thickness_features, skin_thickness_limits = binarize_greater('SkinThickness', 0.2, imputed_train, 5)
-imputed_train, insulin_features, insulin_limits = binarize_greater('Insulin', 0.1, imputed_train, 10)
-imputed_train, bmi_features, bmi_limits = binarize_greater('BMI', 0.1, imputed_train, 4)
-imputed_train, age_features, age_limits = binarize_greater('Age', 0.15, imputed_train, 5)
+imputed_train, pregnancies_features, pregnancies_limits = binarize_limits('Pregnancies', imputed_train, [6, 7])
+imputed_train, glucose_features, glucose_limits = binarize_limits('Glucose', imputed_train, [95, 125, 130, 155, 160])
+imputed_train, blood_pressure_features, blood_pressure_limits = binarize_limits('BloodPressure', imputed_train, [55, 96, 100])
+imputed_train, skin_thickness_features, skin_thickness_limits = binarize_limits('SkinThickness', imputed_train, [35, 48])
+imputed_train, insulin_features, insulin_limits = binarize_limits('Insulin', imputed_train, [50, 100, 120, 145])
+imputed_train, bmi_features, bmi_limits = binarize_limits('BMI',imputed_train, [25, 30, 43])
+imputed_train, age_features, age_limits = binarize_limits('Age', imputed_train, [30, 38, 40, 55])
 
 # binarizing test set
 imputed_test = binarize('Pregnancies', pregnancies_limits, imputed_test)
@@ -77,6 +77,8 @@ imputed_test = binarize('SkinThickness', skin_thickness_limits, imputed_test)
 imputed_test = binarize('Insulin', insulin_limits, imputed_test)
 imputed_test = binarize('BMI', bmi_limits, imputed_test)
 imputed_test = binarize('Age', age_limits, imputed_test)
+
+print('number of features = %d' % len(imputed_train.columns))
 
 # saving processed data
 imputed_train.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
@@ -137,7 +139,9 @@ y_train = df_train.iloc[:,0].values
 X_test = df_test.iloc[:, 1:].values
 y_test = df_test.iloc[:,0].values
 
+# cross validating
 rm = RiskModel(data_headers=df_train.columns.values, params=params, settings=settings, op_constraints=op_constraints)
+cv_result, build_times = riskslim_cv(n_folds,rm, X_train, y_train)
 
 # fitting model
 rm.fit(X_train,y_train)
@@ -147,6 +151,8 @@ y_pred = rm.predict(X_test)
 print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 print("Accuracy = %.3f" % accuracy_score(y_test, y_pred))
+print("optimality_gap = %.3f" % rm.model_info['optimality_gap'])
+print(sec2time(rm.model_info['solver_time']))
 
 # roc auc
 y_roc_pred = rm.decision_function(X_test)
@@ -157,13 +163,15 @@ auc_risk = auc(fpr_risk, tpr_risk)
 table1 = PrettyTable(["Parameter","Value"])
 table1.add_row(["Accuracy", "%0.2f" % accuracy_score(y_test, y_pred)])
 table1.add_row(["AUC", "%0.2f" % auc_risk])
-table1.add_row(["Bin. Method", "all greater, sex split"])
-table1.add_row(["Run Time", round(rm.model_info['solver_time'],1)])
+table1.add_row(["CV-%d" % n_folds ,"%0.2f (+/- %0.2f)" % (cv_result.mean(), cv_result.std()*2)])
+table1.add_row(["Avg. Run Time", "%.0f (+/- %.0f)" % (build_times.mean(), build_times.std()*2)])
+table1.add_row(["Test Run Time", round(rm.model_info['solver_time'])])
+table1.add_row(["Run Hours", sec2time(rm.model_info['solver_time'])])
 table1.add_row(["Max Time", max_runtime])
 table1.add_row(["Max Features", params['max_L0_value']])
+table1.add_row(["Total Stumps", len(imputed_train.columns)])
 table1.add_row(["Optimality Gap", round(rm.model_info['optimality_gap'],3)])
 
-output_file.write("\n\n!--- MODEL INFO ---!\n")
 output_file.write(str(table1))
 output_file.close()
 

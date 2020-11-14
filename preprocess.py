@@ -2,56 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 
-def binarize_real_value(feature_name, n, df):
-
-	ages = df[feature_name].to_numpy()
-	target = df['target'].to_numpy()
-	ages_sorted = np.unique(np.sort(ages))
-	best_limit = 0
-	best_gini = 1.0
-	
-	# find split
-	for limit in ages_sorted[:-1]:
-
-		group1 = ages[ages > limit]
-		group2 = ages[ages <= limit]
-
-		target_group1 = target[ages > limit]
-		target_group2 = target[ages <= limit]
-		
-		p1 = len(group1[target_group1 == 1])/len(group1)
-		p2 = len(group1[target_group1 == 0])/len(group1)
-		gini1 = 1 - pow(p1,2) - pow(p2,2)
-
-		p3 = len(group2[target_group2 == 1])/len(group2)
-		p4 = len(group2[target_group2 == 0])/len(group2)
-		gini2 = 1 - pow(p3,2) - pow(p4,2)
-
-		gini = (len(group1)/len(ages)) * gini1 + (len(group2)/len(ages)) * gini2
-
-		if best_gini > gini:
-			best_limit = limit
-			best_gini = gini
-
-	print("best limit = %d" % best_limit)
-
-	# binarize feature
-	subfeature1 = np.array(ages)
-	subfeature2 = np.array(ages)
-	
-	subfeature1[subfeature1 <= best_limit] = 1
-	subfeature1[subfeature1 > best_limit] = 0
-
-	subfeature2[subfeature2 <= best_limit] = 0
-	subfeature2[subfeature2 > best_limit] = 1
-
-	# edit dataframe
-	index = df.columns.get_loc(feature_name)
-	df.insert(index, "%s <= %d" % (feature_name, best_limit), subfeature1, True)
-	df.insert(index+1, "%s > %d" % (feature_name, best_limit), subfeature2, True)
-	df.drop(feature_name, axis=1, inplace=True)
-
-	return df
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import StratifiedKFold
 
 def binarize_greater(feature_name, k, df, base):
 
@@ -79,6 +31,57 @@ def binarize_greater(feature_name, k, df, base):
 
 		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
 		subfeatures_names.append("%s > %d" % (feature_name, limit))
+		index+=1
+
+	return df, subfeatures_names, limits
+
+def binarize_manual(feature_name, df, min_value, max_value, step):
+
+	data = df[feature_name].to_numpy()
+
+	# generate limits
+	limits = list(range(min_value, max_value, step))
+
+	# limits per feature
+	str1 = ','.join(str(e) for e in limits)
+	print("%s_limits = %s" % (feature_name, str1))
+
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
+	subfeatures_names = []
+	
+	for limit in limits:
+
+		subfeature = np.array(data)
+		subfeature[subfeature <= limit] = 0
+		subfeature[subfeature > limit] = 1
+
+		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
+		subfeatures_names.append("%s > %d" % (feature_name, limit))
+		index+=1
+
+	return df, subfeatures_names, limits
+
+def binarize_limits(feature_name, df, limits):
+
+	data = df[feature_name].to_numpy()
+
+	# limits per feature
+	str1 = ','.join(str(e) for e in limits)
+	print("%s_limits = %s" % (feature_name, str1))
+
+	index = df.columns.get_loc(feature_name)
+	df.drop(feature_name, axis=1, inplace=True)
+	subfeatures_names = []
+	
+	for limit in limits:
+
+		subfeature = np.array(data)
+		subfeature[subfeature < limit] = 0
+		subfeature[subfeature >= limit] = 1
+
+		df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
+		subfeatures_names.append("%s >= %d" % (feature_name, limit))
 		index+=1
 
 	return df, subfeatures_names, limits
@@ -191,7 +194,34 @@ def binarize(feature_name, limits, df):
 
 	return df
 
+def sec2time(seconds):
 
+	hours = int(seconds/3600)
+	minutes = int((seconds%3600)/60)
+	secs = int(seconds%60)
+
+	return '%dh %dmin %dsec' % (hours, minutes, secs)
+
+def riskslim_cv(n_fold, rm, X, y):
+
+	cv = StratifiedKFold(n_splits=n_fold)
+	classifier = rm
+
+	accs = []
+	build_times = []
+
+	for i, (train, test) in enumerate(cv.split(X, y)):
+
+		classifier.threshold = 0.5
+		classifier.fit(X[train], y[train])
+		y_pred = classifier.predict(X[test])
+		accs.append(accuracy_score(y[test], y_pred))
+		build_times.append(classifier.model_info['solver_time'])
+
+	accs = np.array(accs)
+	build_times = np.array(build_times)
+
+	return accs, build_times
 
 if __name__ == "__main__":
 
