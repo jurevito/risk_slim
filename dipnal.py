@@ -17,12 +17,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import KNNImputer
 
+from sklearn.linear_model import Lasso, LogisticRegression
+from sklearn.feature_selection import SelectFromModel
+
 from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex, binarize, binarize_manual, binarize_limits, sec2time, riskslim_cv
 from prettytable import PrettyTable
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'diabetes'
+file = 'heart'
 test_size = 0.2
 n_folds = 5
 max_runtime = 3600.0
@@ -34,55 +37,59 @@ df  = pd.read_csv(path, float_precision='round_trip')
 # taget variable
 y = df.iloc[:,-1].values
 y[y == -1] = 0
-df.drop('Outcome', axis=1, inplace=True)
-df.insert(0, 'Outcome', y, True)
-
-# 0 to nan
-df['Glucose'] = df['Glucose'].replace(0, np.nan)
-df['BloodPressure'] = df['BloodPressure'].replace(0, np.nan)
-df['SkinThickness'] = df['SkinThickness'].replace(0, np.nan)
-df['Insulin'] = df['Insulin'].replace(0, np.nan)
-df['BMI'] = df['BMI'].replace(0, np.nan)
-df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
+df.drop('target', axis=1, inplace=True)
+df.insert(0, 'target', y, True)
 
 # split data
 df = shuffle(df, random_state=1)
 train_df, test_df = train_test_split(df, test_size=test_size, random_state=0)
 
-# imputate train set
-imputer = KNNImputer(n_neighbors=4, weights="uniform")
-imputed_train = pd.DataFrame(imputer.fit_transform(train_df.values))
-imputed_train.columns = train_df.columns
-imputed_train.index = train_df.index
-
-# imputate test set
-imputed_test = pd.DataFrame(imputer.transform(test_df.values))
-imputed_test.columns = test_df.columns
-imputed_test.index = test_df.index
-
 # binarizing train set
-imputed_train, pregnancies_features, pregnancies_limits = binarize_limits('Pregnancies', imputed_train, [6, 7])
-imputed_train, glucose_features, glucose_limits = binarize_limits('Glucose', imputed_train, [95, 125, 130, 155, 160])
-imputed_train, blood_pressure_features, blood_pressure_limits = binarize_limits('BloodPressure', imputed_train, [55, 96, 100])
-imputed_train, skin_thickness_features, skin_thickness_limits = binarize_limits('SkinThickness', imputed_train, [35, 48])
-imputed_train, insulin_features, insulin_limits = binarize_limits('Insulin', imputed_train, [50, 100, 120, 145])
-imputed_train, bmi_features, bmi_limits = binarize_limits('BMI',imputed_train, [25, 30, 43])
-imputed_train, age_features, age_limits = binarize_limits('Age', imputed_train, [30, 38, 40, 55])
+train_df, age_features, age_limits = binarize_limits('age', train_df, [44, 60, 63])
+train_df, trestbps_features, trestbps_limits = binarize_limits('trestbps', train_df, [105, 150])
+train_df, chol_features, chol_limits = binarize_limits('chol', train_df, [165, 175, 225, 271, 330])
+train_df, thalach_features, thalach_limits = binarize_limits('thalach', train_df, [140, 150, 177, 184])
+train_df, oldpeak_features, oldpeak_limits = binarize_limits('oldpeak', train_df, [0.5, 2.5])
+train_df, sex_features = binarize_sex('sex', 'Female', 'Male', train_df)
 
 # binarizing test set
-imputed_test = binarize('Pregnancies', pregnancies_limits, imputed_test)
-imputed_test = binarize('Glucose', glucose_limits, imputed_test)
-imputed_test = binarize('BloodPressure', blood_pressure_limits, imputed_test)
-imputed_test = binarize('SkinThickness', skin_thickness_limits, imputed_test)
-imputed_test = binarize('Insulin', insulin_limits, imputed_test)
-imputed_test = binarize('BMI', bmi_limits, imputed_test)
-imputed_test = binarize('Age', age_limits, imputed_test)
+test_df = binarize('age', age_limits, test_df)
+test_df = binarize('trestbps', trestbps_limits, test_df)
+test_df = binarize('chol', chol_limits, test_df)
+test_df = binarize('thalach', thalach_limits, test_df)
+test_df = binarize('oldpeak', oldpeak_limits, test_df)
+test_df, sex_features = binarize_sex('sex', 'Female', 'Male', test_df)
 
-print('number of features = %d' % len(imputed_train.columns))
+print('number of features = %d' % len(train_df.columns))
+
+X_labels = train_df.columns[1:]
+y_label = train_df.columns[0]
+
+X = train_df[X_labels]
+y = train_df[y_label]
+
+# stump selection
+stump_select = SelectFromModel(LogisticRegression(solver='liblinear', C=1.5, penalty='l1'))
+stump_select.fit(X, y)
+selected_features = list(X_labels[stump_select.get_support()])
+selected_features.insert(0, 'target')
+removed_features = np.setdiff1d(X_labels,selected_features)
+print(removed_features)
+print("removed features = %d - %d" % (len(X_labels),len(removed_features)))
+
+train_df = train_df[selected_features]
+test_df = test_df[selected_features]
+
+age_features = list(set(age_features) & set(selected_features))
+trestbps_features = list(set(trestbps_features) & set(selected_features))
+chol_features = list(set(chol_features) & set(selected_features))
+thalach_features = list(set(thalach_features) & set(selected_features))
+oldpeak_features = list(set(oldpeak_features) & set(selected_features))
+sex_features = list(set(sex_features) & set(selected_features))
 
 # saving processed data
-imputed_train.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
-imputed_test.to_csv('risk_slim/test_data.csv', sep=',', index=False,header=True)
+train_df.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
+test_df.to_csv('risk_slim/test_data.csv', sep=',', index=False,header=True)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -121,13 +128,12 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'pregnancies_features' : pregnancies_features,
-    'glucose_features' : glucose_features,
-    'blood_pressure_features' : blood_pressure_features,
-    'skin_thickness_features' : skin_thickness_features,
-    'insulin_features' : insulin_features,
-    'bmi_features' : bmi_features,
     'age_features' : age_features,
+    'trestbps_features' : trestbps_features,
+    'chol_features' : chol_features,
+    'thalach_features' : thalach_features,
+    'oldpeak_features' : oldpeak_features,
+    'sex_features' : sex_features
 }
 
 # preparing data
@@ -141,7 +147,7 @@ y_test = df_test.iloc[:,0].values
 
 # cross validating
 rm = RiskModel(data_headers=df_train.columns.values, params=params, settings=settings, op_constraints=op_constraints)
-cv_result, build_times = riskslim_cv(n_folds,rm, X_train, y_train)
+cv_result, build_times, opt_gaps = riskslim_cv(n_folds,rm, X_train, y_train)
 
 # fitting model
 rm.fit(X_train,y_train)
@@ -169,7 +175,8 @@ table1.add_row(["Test Run Time", round(rm.model_info['solver_time'])])
 table1.add_row(["Run Hours", sec2time(rm.model_info['solver_time'])])
 table1.add_row(["Max Time", max_runtime])
 table1.add_row(["Max Features", params['max_L0_value']])
-table1.add_row(["Total Stumps", len(imputed_train.columns)])
+table1.add_row(["Total Stumps", len(df_train.columns)])
+table1.add_row(["Avg. Optimality Gap", "%.3f (+/- %.3f)" % (opt_gaps.mean(), opt_gaps.std()*2)])
 table1.add_row(["Optimality Gap", round(rm.model_info['optimality_gap'],3)])
 
 output_file.write(str(table1))

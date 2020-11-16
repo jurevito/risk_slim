@@ -80,8 +80,13 @@ def binarize_limits(feature_name, df, limits):
 		subfeature[subfeature < limit] = 0
 		subfeature[subfeature >= limit] = 1
 
-		df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
-		subfeatures_names.append("%s >= %d" % (feature_name, limit))
+		
+		if isinstance(limit, int):
+			df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
+			subfeatures_names.append("%s >= %d" % (feature_name, limit))
+		else:
+			df.insert(index, "%s >= %.1f" % (feature_name, limit), subfeature, True)
+			subfeatures_names.append("%s >= %.1f" % (feature_name, limit))
 		index+=1
 
 	return df, subfeatures_names, limits
@@ -189,7 +194,10 @@ def binarize(feature_name, limits, df):
 		subfeature[subfeature <= limit] = 0
 		subfeature[subfeature > limit] = 1
 
-		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
+		if isinstance(limit, int):
+			df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
+		else:
+			df.insert(index, "%s >= %.1f" % (feature_name, limit), subfeature, True)
 		index+=1
 
 	return df
@@ -209,6 +217,7 @@ def riskslim_cv(n_fold, rm, X, y):
 
 	accs = []
 	build_times = []
+	optimality_gaps = []
 
 	for i, (train, test) in enumerate(cv.split(X, y)):
 
@@ -217,11 +226,13 @@ def riskslim_cv(n_fold, rm, X, y):
 		y_pred = classifier.predict(X[test])
 		accs.append(accuracy_score(y[test], y_pred))
 		build_times.append(classifier.model_info['solver_time'])
+		optimality_gaps.append(classifier.model_info['optimality_gap'])
 
 	accs = np.array(accs)
 	build_times = np.array(build_times)
+	optimality_gaps = np.array(optimality_gaps)
 
-	return accs, build_times
+	return accs, build_times, optimality_gaps
 
 if __name__ == "__main__":
 
