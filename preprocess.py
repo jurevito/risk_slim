@@ -62,34 +62,43 @@ def binarize_manual(feature_name, df, min_value, max_value, step):
 
 	return df, subfeatures_names, limits
 
-def binarize_limits(feature_name, df, limits):
+def binarize_limits(feature_name, train_df, test_df, limits):
 
-	data = df[feature_name].to_numpy()
+	train_data = train_df[feature_name].to_numpy()
+	test_data = test_df[feature_name].to_numpy()
 
 	# limits per feature
 	str1 = ','.join(str(e) for e in limits)
 	print("%s_limits = %s" % (feature_name, str1))
 
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
+	index = train_df.columns.get_loc(feature_name)
+	train_df.drop(feature_name, axis=1, inplace=True)
+	test_df.drop(feature_name, axis=1, inplace=True)
 	subfeatures_names = []
 	
 	for limit in limits:
 
-		subfeature = np.array(data)
-		subfeature[subfeature < limit] = 0
-		subfeature[subfeature >= limit] = 1
+		subfeature_train = np.array(train_data)
+		subfeature_test = np.array(test_data)
+
+		subfeature_train[subfeature_train < limit] = 0
+		subfeature_train[subfeature_train >= limit] = 1
+
+		subfeature_test[subfeature_test < limit] = 0
+		subfeature_test[subfeature_test >= limit] = 1
 
 		
 		if isinstance(limit, int):
-			df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
+			train_df.insert(index, "%s >= %d" % (feature_name, limit), subfeature_train, True)
+			test_df.insert(index, "%s >= %d" % (feature_name, limit), subfeature_test, True)
 			subfeatures_names.append("%s >= %d" % (feature_name, limit))
 		else:
-			df.insert(index, "%s >= %.1f" % (feature_name, limit), subfeature, True)
-			subfeatures_names.append("%s >= %.1f" % (feature_name, limit))
+			train_df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature_train, True)
+			test_df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature_test, True)
+			subfeatures_names.append("%s >= %.4f" % (feature_name, limit))
 		index+=1
 
-	return df, subfeatures_names, limits
+	return train_df, test_df, subfeatures_names, limits
 
 def binarize_interval(feature_name, k, df):
 
@@ -197,7 +206,7 @@ def binarize(feature_name, limits, df):
 		if isinstance(limit, int):
 			df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
 		else:
-			df.insert(index, "%s >= %.1f" % (feature_name, limit), subfeature, True)
+			df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature, True)
 		index+=1
 
 	return df

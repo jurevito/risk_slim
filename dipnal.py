@@ -25,67 +25,83 @@ from prettytable import PrettyTable
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'heart'
+file = 'breast'
 test_size = 0.2
 n_folds = 5
-max_runtime = 3600.0
+max_runtime = 2.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file + '.csv'
 df  = pd.read_csv(path, float_precision='round_trip')
 
-# taget variable
-y = df.iloc[:,-1].values
-y[y == -1] = 0
-df.drop('target', axis=1, inplace=True)
-df.insert(0, 'target', y, True)
+# removing highly coorelated features
+df = df.drop(['radius_worst', 'radius_mean','area_worst','perimeter_mean','area_mean'], axis=1)
+df = df.drop(['texture_worst','concave points_mean','radius_se'], axis=1)
+df = df.drop(['compactness_mean','compactness_worst','concavity_mean'], axis=1)
 
 # split data
 df = shuffle(df, random_state=1)
 train_df, test_df = train_test_split(df, test_size=test_size, random_state=0)
 
-# binarizing train set
-train_df, age_features, age_limits = binarize_limits('age', train_df, [44, 60, 63])
-train_df, trestbps_features, trestbps_limits = binarize_limits('trestbps', train_df, [105, 150])
-train_df, chol_features, chol_limits = binarize_limits('chol', train_df, [165, 175, 225, 271, 330])
-train_df, thalach_features, thalach_limits = binarize_limits('thalach', train_df, [140, 150, 177, 184])
-train_df, oldpeak_features, oldpeak_limits = binarize_limits('oldpeak', train_df, [0.5, 2.5])
-train_df, sex_features = binarize_sex('sex', 'Female', 'Male', train_df)
-
-# binarizing test set
-test_df = binarize('age', age_limits, test_df)
-test_df = binarize('trestbps', trestbps_limits, test_df)
-test_df = binarize('chol', chol_limits, test_df)
-test_df = binarize('thalach', thalach_limits, test_df)
-test_df = binarize('oldpeak', oldpeak_limits, test_df)
-test_df, sex_features = binarize_sex('sex', 'Female', 'Male', test_df)
+# binarizing train and test set
+train_df, test_df, texture_mean, texture_mean_limits = binarize_limits('texture_mean', train_df, test_df, [15, 21.5])
+train_df, test_df, smoothness_mean, smoothness_mean_limits = binarize_limits('smoothness_mean', train_df, test_df, [0.880, 0.903])
+train_df, test_df, symmetry_mean, symmetry_mean_limits = binarize_limits('symmetry_mean', train_df, test_df, [0.148, 0.153])
+train_df, test_df, fractal_dimension_mean, fractal_dimension_mean_limits = binarize_limits('fractal_dimension_mean', train_df, test_df, [0.558, 0.572])
+train_df, test_df, texture_se, texture_se_limits = binarize_limits('texture_se', train_df, test_df, [0.82])
+train_df, test_df, perimeter_se, perimeter_se_limits = binarize_limits('perimeter_se', train_df, test_df, [4.12, 1.5])
+train_df, test_df, area_se, area_se_limits = binarize_limits('area_se', train_df, test_df, [17])
+train_df, test_df, smoothness_se, smoothness_se_limits = binarize_limits('smoothness_se', train_df, test_df, [0.01, 0.004])
+train_df, test_df, compactness_se, compactness_se_limits = binarize_limits('compactness_se', train_df, test_df, [0.011, 0.041])
+train_df, test_df, concavity_se, concavity_se_limits = binarize_limits('concavity_se', train_df, test_df, [0.0105])
+train_df, test_df, concave_points_se, concave_points_se_limits = binarize_limits('concave points_se', train_df, test_df, [0.0095])
+train_df, test_df, symmetry_se, symmetry_se_limits = binarize_limits('symmetry_se', train_df, test_df, [0.014])
+train_df, test_df, fractal_dimension_se, fractal_dimension_se_limits = binarize_limits('fractal_dimension_se', train_df, test_df, [0.003, 0.0052])
+train_df, test_df, perimeter_worst, perimeter_worst_limits = binarize_limits('perimeter_worst', train_df, test_df, [98, 117, 103])
+train_df, test_df, smoothness_worst, smoothness_worst_limits = binarize_limits('smoothness_worst', train_df, test_df, [0.135, 0.14])
+train_df, test_df, concavity_worst, concavity_worst_limits = binarize_limits('concavity_worst', train_df, test_df, [0.19, 0.21, 0.37])
+train_df, test_df, concave_points_worst, concave_points_worst_limits = binarize_limits('concave points_worst', train_df, test_df, [0.114, 0.15])
+train_df, test_df, symmetry_worst, symmetry_worst_limits = binarize_limits('symmetry_worst', train_df, test_df, [0.33, 0.265])
+train_df, test_df, fractal_dimension_worst, fractal_dimension_worst_limits = binarize_limits('fractal_dimension_worst', train_df, test_df, [0.093])
 
 print('number of features = %d' % len(train_df.columns))
 
 X_labels = train_df.columns[1:]
 y_label = train_df.columns[0]
-
 X = train_df[X_labels]
 y = train_df[y_label]
 
 # stump selection
-stump_select = SelectFromModel(LogisticRegression(solver='liblinear', C=1.5, penalty='l1'))
+stump_select = SelectFromModel(LogisticRegression(solver='liblinear', C=0.55, penalty='l1'))
 stump_select.fit(X, y)
 selected_features = list(X_labels[stump_select.get_support()])
-selected_features.insert(0, 'target')
+selected_features.insert(0, 'diagnosis')
 removed_features = np.setdiff1d(X_labels,selected_features)
 print(removed_features)
-print("removed features = %d - %d" % (len(X_labels),len(removed_features)))
+print("removed features = %d - %d = %d" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
 
 train_df = train_df[selected_features]
 test_df = test_df[selected_features]
 
-age_features = list(set(age_features) & set(selected_features))
-trestbps_features = list(set(trestbps_features) & set(selected_features))
-chol_features = list(set(chol_features) & set(selected_features))
-thalach_features = list(set(thalach_features) & set(selected_features))
-oldpeak_features = list(set(oldpeak_features) & set(selected_features))
-sex_features = list(set(sex_features) & set(selected_features))
+texture_mean = list(set(texture_mean) & set(selected_features))
+smoothness_mean = list(set(smoothness_mean) & set(selected_features))
+symmetry_mean = list(set(symmetry_mean) & set(selected_features))
+fractal_dimension_mean = list(set(fractal_dimension_mean) & set(selected_features))
+texture_se = list(set(texture_se) & set(selected_features))
+perimeter_se = list(set(perimeter_se) & set(selected_features))
+area_se = list(set(area_se) & set(selected_features))
+smoothness_se = list(set(smoothness_se) & set(selected_features))
+compactness_se = list(set(compactness_se) & set(selected_features))
+concavity_se = list(set(concavity_se) & set(selected_features))
+concave_points_se = list(set(concave_points_se) & set(selected_features))
+symmetry_se = list(set(symmetry_se) & set(selected_features))
+fractal_dimension_se = list(set(fractal_dimension_se) & set(selected_features))
+perimeter_worst = list(set(perimeter_worst) & set(selected_features))
+smoothness_worst = list(set(smoothness_worst) & set(selected_features))
+concavity_worst = list(set(concavity_worst) & set(selected_features))
+concave_points_worst = list(set(concave_points_worst) & set(selected_features))
+symmetry_worst = list(set(symmetry_worst) & set(selected_features))
+fractal_dimension_worst = list(set(fractal_dimension_worst) & set(selected_features))
 
 # saving processed data
 train_df.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
@@ -128,12 +144,25 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'age_features' : age_features,
-    'trestbps_features' : trestbps_features,
-    'chol_features' : chol_features,
-    'thalach_features' : thalach_features,
-    'oldpeak_features' : oldpeak_features,
-    'sex_features' : sex_features
+    'texture_mean' : texture_mean,
+    'smoothness_mean' : smoothness_mean,
+    'symmetry_mean' : symmetry_mean,
+    'fractal_dimension_mean' : fractal_dimension_mean,
+    'texture_se' : texture_se,
+    'perimeter_se' : perimeter_se,
+    'area_se' : area_se,
+    'smoothness_se' : smoothness_se,
+    'compactness_se' : compactness_se,
+    'concavity_se' : concavity_se,
+    'concave_points_se' : concave_points_se,
+    'symmetry_se' : symmetry_se,
+    'fractal_dimension_se' : fractal_dimension_se,
+    'perimeter_worst' : perimeter_worst,
+    'smoothness_worst' : smoothness_worst,
+    'concavity_worst' : concavity_worst,
+    'concave_points_worst' : concave_points_worst,
+    'symmetry_worst' : symmetry_worst,
+    'fractal_dimension_worst' : fractal_dimension_worst,
 }
 
 # preparing data
