@@ -17,10 +17,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import KNNImputer
 
-from sklearn.linear_model import Lasso, LogisticRegression
-from sklearn.feature_selection import SelectFromModel
-
-from preprocess import binarize_greater, binarize_interval, binarize_category, binarize_sex, binarize, binarize_manual, binarize_limits, sec2time, riskslim_cv
+from preprocess import binarize_limits, sec2time, riskslim_cv, find_treshold_index, stump_selection, fix_names
 from prettytable import PrettyTable
 
 # setup variables
@@ -28,7 +25,7 @@ output_file = open('result.txt', 'w+')
 file = 'breast'
 test_size = 0.2
 n_folds = 5
-max_runtime = 2.0
+max_runtime = 1.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file + '.csv'
@@ -66,42 +63,31 @@ train_df, test_df, fractal_dimension_worst, fractal_dimension_worst_limits = bin
 
 print('number of features = %d' % len(train_df.columns))
 
-X_labels = train_df.columns[1:]
-y_label = train_df.columns[0]
-X = train_df[X_labels]
-y = train_df[y_label]
-
-# stump selection
-stump_select = SelectFromModel(LogisticRegression(solver='liblinear', C=0.55, penalty='l1'))
-stump_select.fit(X, y)
-selected_features = list(X_labels[stump_select.get_support()])
-selected_features.insert(0, 'diagnosis')
-removed_features = np.setdiff1d(X_labels,selected_features)
-print(removed_features)
-print("removed features = %d - %d = %d" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
+# selecting stumps and updating feature names
+selected_features = stump_selection(0.55, train_df, output_file)
 
 train_df = train_df[selected_features]
 test_df = test_df[selected_features]
 
-texture_mean = list(set(texture_mean) & set(selected_features))
-smoothness_mean = list(set(smoothness_mean) & set(selected_features))
-symmetry_mean = list(set(symmetry_mean) & set(selected_features))
-fractal_dimension_mean = list(set(fractal_dimension_mean) & set(selected_features))
-texture_se = list(set(texture_se) & set(selected_features))
-perimeter_se = list(set(perimeter_se) & set(selected_features))
-area_se = list(set(area_se) & set(selected_features))
-smoothness_se = list(set(smoothness_se) & set(selected_features))
-compactness_se = list(set(compactness_se) & set(selected_features))
-concavity_se = list(set(concavity_se) & set(selected_features))
-concave_points_se = list(set(concave_points_se) & set(selected_features))
-symmetry_se = list(set(symmetry_se) & set(selected_features))
-fractal_dimension_se = list(set(fractal_dimension_se) & set(selected_features))
-perimeter_worst = list(set(perimeter_worst) & set(selected_features))
-smoothness_worst = list(set(smoothness_worst) & set(selected_features))
-concavity_worst = list(set(concavity_worst) & set(selected_features))
-concave_points_worst = list(set(concave_points_worst) & set(selected_features))
-symmetry_worst = list(set(symmetry_worst) & set(selected_features))
-fractal_dimension_worst = list(set(fractal_dimension_worst) & set(selected_features))
+texture_mean = fix_names(texture_mean, selected_features)
+smoothness_mean = fix_names(smoothness_mean, selected_features)
+symmetry_mean = fix_names(symmetry_mean, selected_features)
+fractal_dimension_mean = fix_names(fractal_dimension_mean, selected_features)
+texture_se = fix_names(texture_se, selected_features)
+perimeter_se = fix_names(perimeter_se, selected_features)
+area_se = fix_names(area_se, selected_features)
+smoothness_se = fix_names(smoothness_se, selected_features)
+compactness_se = fix_names(compactness_se, selected_features)
+concavity_se = fix_names(concavity_se, selected_features)
+concave_points_se = fix_names(concave_points_se, selected_features)
+symmetry_se = fix_names(symmetry_se, selected_features)
+fractal_dimension_se = fix_names(fractal_dimension_se, selected_features)
+perimeter_worst = fix_names(perimeter_worst, selected_features)
+smoothness_worst = fix_names(smoothness_worst, selected_features)
+concavity_worst = fix_names(concavity_worst, selected_features)
+concave_points_worst = fix_names(concave_points_worst, selected_features)
+symmetry_worst = fix_names(symmetry_worst, selected_features)
+fractal_dimension_worst = fix_names(fractal_dimension_worst, selected_features)
 
 # saving processed data
 train_df.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
@@ -190,9 +176,10 @@ print("optimality_gap = %.3f" % rm.model_info['optimality_gap'])
 print(sec2time(rm.model_info['solver_time']))
 
 # roc auc
-y_roc_pred = rm.decision_function(X_test)
+y_roc_pred = rm.predict_proba(X_test)
 fpr_risk, tpr_risk, treshold_risk = roc_curve(y_test, y_roc_pred)
 auc_risk = auc(fpr_risk, tpr_risk)
+op_index = find_treshold_index(treshold_risk, 0.5)
 
 # saving results and model info
 table1 = PrettyTable(["Parameter","Value"])
@@ -214,6 +201,7 @@ output_file.close()
 # plotting roc curve
 plt.figure(figsize=(5, 5), dpi=100)
 plt.plot(fpr_risk, tpr_risk, linestyle='-', label='Risk Slim (auc = %0.2f)' % auc_risk)
+plt.plot([fpr_risk[op_index]], [tpr_risk[op_index]], marker='o', color='cyan')
 plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend()

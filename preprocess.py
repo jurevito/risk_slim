@@ -4,72 +4,13 @@ import pandas as pd
 
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
-
-def binarize_greater(feature_name, k, df, base):
-
-	data = df[feature_name].to_numpy()
-
-	# generate limits
-	max_value = base * round(np.amax(data)/base)
-	min_value = base * round(np.amin(data)/base)
-	step = base * round(int((max_value - min_value) * k)/base)
-	limits = list(range(min_value, max_value, step))
-
-	# limits per feature
-	str1 = ','.join(str(e) for e in limits)
-	print("%s_limits = %s" % (feature_name, str1))
-
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-	subfeatures_names = []
-	
-	for limit in limits:
-
-		subfeature = np.array(data)
-		subfeature[subfeature <= limit] = 0
-		subfeature[subfeature > limit] = 1
-
-		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
-		subfeatures_names.append("%s > %d" % (feature_name, limit))
-		index+=1
-
-	return df, subfeatures_names, limits
-
-def binarize_manual(feature_name, df, min_value, max_value, step):
-
-	data = df[feature_name].to_numpy()
-
-	# generate limits
-	limits = list(range(min_value, max_value, step))
-
-	# limits per feature
-	str1 = ','.join(str(e) for e in limits)
-	print("%s_limits = %s" % (feature_name, str1))
-
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-	subfeatures_names = []
-	
-	for limit in limits:
-
-		subfeature = np.array(data)
-		subfeature[subfeature <= limit] = 0
-		subfeature[subfeature > limit] = 1
-
-		df.insert(index, "%s > %d" % (feature_name, limit), subfeature, True)
-		subfeatures_names.append("%s > %d" % (feature_name, limit))
-		index+=1
-
-	return df, subfeatures_names, limits
+from sklearn.linear_model import Lasso, LogisticRegression
+from sklearn.feature_selection import SelectFromModel
 
 def binarize_limits(feature_name, train_df, test_df, limits):
 
 	train_data = train_df[feature_name].to_numpy()
 	test_data = test_df[feature_name].to_numpy()
-
-	# limits per feature
-	str1 = ','.join(str(e) for e in limits)
-	print("%s_limits = %s" % (feature_name, str1))
 
 	index = train_df.columns.get_loc(feature_name)
 	train_df.drop(feature_name, axis=1, inplace=True)
@@ -93,123 +34,13 @@ def binarize_limits(feature_name, train_df, test_df, limits):
 			test_df.insert(index, "%s >= %d" % (feature_name, limit), subfeature_test, True)
 			subfeatures_names.append("%s >= %d" % (feature_name, limit))
 		else:
-			train_df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature_train, True)
-			test_df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature_test, True)
-			subfeatures_names.append("%s >= %.4f" % (feature_name, limit))
+			bin_feature = ("%s >= %f" % (feature_name, limit)).rstrip('0').rstrip('.')
+			train_df.insert(index, bin_feature, subfeature_train, True)
+			test_df.insert(index, bin_feature, subfeature_test, True)
+			subfeatures_names.append(bin_feature)
 		index+=1
 
 	return train_df, test_df, subfeatures_names, limits
-
-def binarize_interval(feature_name, k, df):
-
-	data = df[feature_name].to_numpy()
-
-	# generate limits
-	max_value = np.amax(data)
-	min_value = np.amin(data)
-	step = int((max_value - min_value) * k)
-	limits = list(range(min_value + int(max_value*0.01), max_value - int(max_value*0.01), step))
-
-	# limits per feature
-	str1 = ','.join(str(e) for e in limits)
-	print("%s_limits(interval) = %s" % (feature_name, str1))
-
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-	subfeatures_names = []
-
-	for i,limit in enumerate(limits):
-
-		subfeature = np.array(data)
-
-		if i == 0:
-
-			# first interval
-			subfeature[subfeature <= limit] = 1
-			subfeature[subfeature > limit] = 0
-			df.insert(index, "%s <= %d" % (feature_name, limit), subfeature, True)
-			subfeatures_names.append("%s <= %d" % (feature_name, limit))
-
-		else:
-
-			subfeature[(subfeature <= limits[i-1]) | (subfeature > limit)] = 0
-			subfeature[(subfeature <= limit) & (subfeature > limits[i-1])] = 1
-			df.insert(index, "%d < %s <= %d" % (limits[i-1], feature_name, limit), subfeature, True)
-			subfeatures_names.append("%d < %s <= %d" % (limits[i-1], feature_name, limit))
-
-		index+=1
-
-	# last interval
-	subfeature = np.array(data)
-	subfeature[subfeature <= limits[-1]] = 0
-	subfeature[subfeature > limits[-1]] = 1
-	df.insert(index, "%d < %s" % (limits[-1], feature_name), subfeature, True)
-	subfeatures_names.append("%d < %s" % (limits[-1], feature_name))
-
-	return df, subfeatures_names
-
-def binarize_category(feature_name, df):
-
-	data = df[feature_name].to_numpy()
-	subfeatures = {}
-	n = len(data)
-
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-	subfeatures_names = []
-
-	for i,value in enumerate(data):
-
-		if value not in subfeatures.keys():
-
-			subfeatures[value] = np.zeros((n,), dtype=int)
-			subfeatures[value][i] = 1
-
-		else:
-
-			subfeatures[value][i] = 1
-
-	# insert subfeatures
-	for key in subfeatures.keys():
-
-		df.insert(index, key, subfeatures[key], True)
-		subfeatures_names.append(key)
-		index+=1
-
-	return df, subfeatures_names
-
-# class1_name are 0, class2_name are 1
-def binarize_sex(feature_name, class1_name, class2_name, df):
-
-	data = df[feature_name].to_numpy()
-
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-
-	df.insert(index, class1_name, 1 - data, True)
-	df.insert(index+1, class2_name, data, True)
-
-	return df, [class1_name, class2_name]
-
-def binarize(feature_name, limits, df):
-
-	data = df[feature_name].to_numpy()
-	index = df.columns.get_loc(feature_name)
-	df.drop(feature_name, axis=1, inplace=True)
-
-	for limit in limits:
-
-		subfeature = np.array(data)
-		subfeature[subfeature <= limit] = 0
-		subfeature[subfeature > limit] = 1
-
-		if isinstance(limit, int):
-			df.insert(index, "%s >= %d" % (feature_name, limit), subfeature, True)
-		else:
-			df.insert(index, "%s >= %.4f" % (feature_name, limit), subfeature, True)
-		index+=1
-
-	return df
 
 def sec2time(seconds):
 
@@ -242,6 +73,44 @@ def riskslim_cv(n_fold, rm, X, y):
 	optimality_gaps = np.array(optimality_gaps)
 
 	return accs, build_times, optimality_gaps
+
+def find_treshold_index(tresholds, my_treshold):
+
+    index = 0
+    smallest_d = 1
+    for i,t in enumerate(tresholds):
+
+        d = abs(my_treshold - t)
+
+        if d < smallest_d:
+            smallest_d = d
+            index = i
+
+    return index
+
+def stump_selection(C, train_df, file):
+
+	X_labels = train_df.columns[1:]
+	y_label = train_df.columns[0]
+	X = train_df[X_labels]
+	y = train_df[y_label]
+
+	selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1'))
+	selector.fit(X, y)
+	selected_features = list(X_labels[selector.get_support()])
+	selected_features.insert(0, y_label)
+	removed_features = np.setdiff1d(X_labels, selected_features)
+
+	# printing removed features
+	file.write("Removed stumps (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
+	for r in removed_features:
+		file.write(" %s\n" % r)
+
+	return selected_features
+
+def fix_names(names, selected_features):
+	return list(set(names) & set(selected_features))
+
 
 if __name__ == "__main__":
 

@@ -184,7 +184,7 @@ class RiskModel(BaseEstimator):
 
         return y
 
-    def decision_function(self, X):
+    def predict_proba(self, X):
 
         X = check_array(X, accept_sparse=True)
         X = X[:,self.filter_mask]
