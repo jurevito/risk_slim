@@ -55,7 +55,7 @@ df = df.drop(removed_features, axis=1)
 
 # split data
 df = shuffle(df, random_state=1)
-df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['class'])
+df_train, df_test = train_test_split(df, test_size=test_size*2, random_state=0, stratify=df['class'])
 
 # class imbalance
 zeros_class = (df_train['class'] == 0).astype(int).sum(axis=0)
@@ -107,55 +107,61 @@ df_train = df_train[selected_features]
 df_test = df_test[selected_features]
 
 # binarizing train and test set
-df_train, df_test, S011 = binarize_limits('S011', df_train, df_test, [-0.025])
-df_train, df_test, X028 = binarize_limits('X028', df_train, df_test, [-0.017, -0.024])
-df_train, df_test, X051 = binarize_limits('X051', df_train, df_test, [0.18])
-df_train, df_test, X099 = binarize_limits('X099', df_train, df_test, [0.35])
-df_train, df_test, X103 = binarize_limits('X103', df_train, df_test, [0.52, 0.13])
-df_train, df_test, X110 = binarize_limits('X110', df_train, df_test, [-0.115, -0.1])
-df_train, df_test, X113 = binarize_limits('X113', df_train, df_test, [0.09, -0.05])
-df_train, df_test, X121 = binarize_limits('X121', df_train, df_test, [0.025, 0.1])
-df_train, df_test, X132 = binarize_limits('X132', df_train, df_test, [-0.1, 0.02, 0.1]) # cis hud
-df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [-0.16, 0.17])
-df_train, df_test, X157 = binarize_limits('X157', df_train, df_test, [-0.05, 0.056, 0.08])
-df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [0.22])
-df_train, df_test, X201 = binarize_limits('X201', df_train, df_test, [-0.15, 0.03, 0.06])
-df_train, df_test, X210 = binarize_limits('X210', df_train, df_test, [0.02, 0.04])
-df_train, df_test, X221 = binarize_limits('X221', df_train, df_test, [-0.2])
-df_train, df_test, X229 = binarize_limits('X229', df_train, df_test, [-0.05, 0.05, 0.01])
-df_train, df_test, X247 = binarize_limits('X247', df_train, df_test, [-0.01, 0.35]) # 0.4
-df_train, df_test, X272 = binarize_limits('X272', df_train, df_test, [-0.04, 0.02])
-df_train, df_test, X277 = binarize_limits('X277', df_train, df_test, [-0.28, -0.15, -0.04, 0.1])
+df_train, df_test, X023 = binarize_limits('X023', df_train, df_test, [0.22])
+df_train, df_test, X103 = binarize_limits('X103', df_train, df_test, [0.52])
+df_train, df_test, X110 = binarize_limits('X110', df_train, df_test, [0.15])
+df_train, df_test, X113 = binarize_limits('X113', df_train, df_test, [0.1])
+df_train, df_test, X121 = binarize_limits('X121', df_train, df_test, [0.1, -0.015])
+df_train, df_test, X127 = binarize_limits('X127', df_train, df_test, [0.035, 0.15])
+df_train, df_test, X132 = binarize_limits('X132', df_train, df_test, [-0.09, 0, 0.1])
+df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [-0.1, -0.15, 0.16])
+df_train, df_test, X157 = binarize_limits('X157', df_train, df_test, [-0.06, 0.08])
+df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [0.23, 0.27])
+df_train, df_test, X173 = binarize_limits('X173', df_train, df_test, [-0.22, 0.26])
+df_train, df_test, X201 = binarize_limits('X201', df_train, df_test, [0.03])
+df_train, df_test, X210 = binarize_limits('X210', df_train, df_test, [-0.1, 0.02])
+df_train, df_test, X213 = binarize_limits('X213', df_train, df_test, [0.02, 0.035])
+df_train, df_test, X215 = binarize_limits('X215', df_train, df_test, [-0.11, -0.09])
+df_train, df_test, X221 = binarize_limits('X221', df_train, df_test, [-0.31, -0.2])
+df_train, df_test, X229 = binarize_limits('X229', df_train, df_test, [-0.025, 0.13])
+df_train, df_test, X247 = binarize_limits('X247', df_train, df_test, [0.3])
+df_train, df_test, X272 = binarize_limits('X272', df_train, df_test, [-0.3])
+df_train, df_test, X277 = binarize_limits('X277', df_train, df_test, [-0.1])
 df_train, df_test, X278 = binarize_limits('X278', df_train, df_test, [0.5])
 
 print('1. n_features = %d' % len(df_train.columns))
 
 # binary valued feature selection
-selected_features = stump_selection(0.001, df_train, output_file)
+selected_features = stump_selection(0.005, df_train, output_file)
 df_train = df_train[selected_features]
 df_test = df_test[selected_features]
 
 print('2. n_features = %d' % len(df_train.columns))
 
-S011 = fix_names(S011, selected_features)
-X028 = fix_names(X028, selected_features)
-X051 = fix_names(X051, selected_features)
-X099 = fix_names(X099, selected_features)
+X023 = fix_names(X023, selected_features)
 X103 = fix_names(X103, selected_features)
 X110 = fix_names(X110, selected_features)
 X113 = fix_names(X113, selected_features)
 X121 = fix_names(X121, selected_features)
+X127 = fix_names(X127, selected_features)
 X132 = fix_names(X132, selected_features)
 X144 = fix_names(X144, selected_features)
 X157 = fix_names(X157, selected_features)
 X162 = fix_names(X162, selected_features)
+X173 = fix_names(X173, selected_features)
 X201 = fix_names(X201, selected_features)
 X210 = fix_names(X210, selected_features)
+X213 = fix_names(X213, selected_features)
+X215 = fix_names(X215, selected_features)
 X221 = fix_names(X221, selected_features)
 X229 = fix_names(X229, selected_features)
 X247 = fix_names(X247, selected_features)
 X272 = fix_names(X272, selected_features)
 X277 = fix_names(X277, selected_features)
+X278 = fix_names(X278, selected_features)
+
+# split into test and validation
+df_valid, df_test = train_test_split(df_test, test_size=0.5, random_state=0, stratify=df_test['class'])
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -194,30 +200,34 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'S011': S011,
-    'X028': X028,
-    'X051': X051,
-    'X099': X099,
+    'X023': X023,
     'X103': X103,
     'X110': X110,
     'X113': X113,
     'X121': X121,
+    'X127': X127,
     'X132': X132,
     'X144': X144,
     'X157': X157,
     'X162': X162,
+    'X173': X173,
     'X201': X201,
     'X210': X210,
+    'X213': X213,
+    'X215': X215,
     'X221': X221,
     'X229': X229,
     'X247': X247,
     'X272': X272,
     'X277': X277,
+    'X278': X278,
 }
 
 # preparing data
 X_train = df_train.iloc[:,1:].values
 y_train = df_train.iloc[:,0].values
+X_valid = df_valid.iloc[:,1:].values
+y_valid = df_valid.iloc[:,0].values
 X_test = df_test.iloc[:,1:].values
 y_test = df_test.iloc[:,0].values
 data_headers = df_train.columns
@@ -228,9 +238,19 @@ cv_result, build_times, opt_gaps = riskslim_cv(n_folds,rm, X_train, y_train)
 
 # fitting model
 rm.fit(X_train,y_train)
-y_pred = rm.predict(X_test)
 
-# print metrics
+# validation metrics
+print('validating:')
+y_pred = rm.predict(X_valid)
+print(confusion_matrix(y_valid, y_pred))
+print(classification_report(y_valid, y_pred))
+print("Accuracy = %.3f" % accuracy_score(y_valid, y_pred))
+print("optimality_gap = %.3f" % rm.model_info['optimality_gap'])
+print(sec2time(rm.model_info['solver_time']))
+
+# testing metrics
+print('Testing:')
+y_pred = rm.predict(X_test)
 print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 print("Accuracy = %.3f" % accuracy_score(y_test, y_pred))
