@@ -13,85 +13,149 @@ from riskslim.lattice_cpa import run_lattice_cpa
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import KNNImputer
+from sklearn.linear_model import Lasso, LogisticRegression
+from sklearn.feature_selection import SelectFromModel
 
 from preprocess import binarize_limits, sec2time, riskslim_cv, find_treshold_index, stump_selection, fix_names
 from prettytable import PrettyTable
 
+from imblearn.combine import SMOTEENN
+
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'breast'
-test_size = 0.2
+file = 'Disease-BIN.hd5'
+test_size = 0.1
 n_folds = 5
-max_runtime = 1.0
+max_runtime = 7000.0
 
 os.chdir('..')
-path = os.getcwd() + '/risk-slim/examples/data/' + file + '.csv'
-df  = pd.read_csv(path, float_precision='round_trip')
+path = os.getcwd() + '/risk-slim/examples/data/' + file
+hdf  = pd.HDFStore(path, mode='r')
+df = hdf.get('/Xy')
 
-# removing highly coorelated features
-df = df.drop(['radius_worst', 'radius_mean','area_worst','perimeter_mean','area_mean'], axis=1)
-df = df.drop(['texture_worst','concave points_mean','radius_se'], axis=1)
-df = df.drop(['compactness_mean','compactness_worst','concavity_mean'], axis=1)
+# move outcome at beginning
+outcome_values = df['class'].values
+df = df.drop(['class'], axis=1)
+df.insert(0, 'class', outcome_values, True)
+
+# category to int
+LE = LabelEncoder()
+df['class'] = LE.fit_transform(df['class'])
+
+# show missing value percentage
+percent_missing = df.isnull().sum() * 100 / len(df)
+missing_value_df = pd.DataFrame({'column_name': df.columns, 'percent_missing': percent_missing})
+missing_value_df.sort_values('percent_missing', inplace=True)
+removed_features = list(missing_value_df.loc[missing_value_df['percent_missing'] >= 98.00, 'column_name'])
+print('total removed = %d (%.2f%%)' % (len(removed_features), (len(removed_features) / len(df.columns)*100)))
+df = df.drop(removed_features, axis=1)
 
 # split data
 df = shuffle(df, random_state=1)
-train_df, test_df = train_test_split(df, test_size=test_size, random_state=0)
+df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['class'])
+
+# class imbalance
+zeros_class = (df_train['class'] == 0).astype(int).sum(axis=0)
+ones_class = (df_train['class'] == 1).astype(int).sum(axis=0)
+print('zeros = %d, ones = %d (%.2f%%)' % (zeros_class, ones_class, (zeros_class/len(df_train['class']))*100))
+
+# data imputation
+tmp1 = df_train
+tmp2 = df_test
+imputer = KNNImputer(n_neighbors=2, weights="uniform")
+df_train = pd.DataFrame(imputer.fit_transform(df_train))
+df_test = pd.DataFrame(imputer.transform(df_test))
+
+df_train.columns = tmp1.columns
+df_train.index = tmp1.index
+df_test.columns = tmp2.columns
+df_test.index = tmp2.index
+
+# remove highly coorelated features
+print('features1 = %d' % len(df_train.columns))
+df_train = df_train.drop(['X212','X095','X111','X211','X273','X096','S069','X138','X170','X093','X118','X118','X112','X172'], axis=1)
+df_test = df_test.drop(['X212','X095','X111','X211','X273','X096','S069','X138','X170','X093','X118','X118','X112','X172'], axis=1)
+print('features2 = %d' % len(df_train.columns))
+corr_lower = 0.8
+corr = df_train.corr().abs()
+s = corr.unstack()
+so = s.sort_values(kind="quicksort")
+so = so[(so > corr_lower) & (so < 1.0)]
+
+# class rebalancing
+X = df_train.iloc[:, 1:].values
+y = df_train.iloc[:,0].values
+smoteenn = SMOTEENN(random_state=0)
+X_resampled, y_resampled = smoteenn.fit_resample(X, y)
+
+col_names = df_train.columns
+y_resampled = np.reshape(y_resampled, (-1, 1))
+tmp = np.concatenate((y_resampled, X_resampled), axis=1)
+df_train = pd.DataFrame(tmp, columns=col_names)
+
+# class balance
+zeros_class = (df_train['class'] == 0).astype(int).sum(axis=0)
+ones_class = (df_train['class'] == 1).astype(int).sum(axis=0)
+print('zeros = %d, ones = %d (%.2f%%)' % (zeros_class, ones_class, (zeros_class/len(df_train['class']))*100))
+
+# real valued feature selection
+selected_features = stump_selection(0.15, df_train, output_file)
+df_train = df_train[selected_features]
+df_test = df_test[selected_features]
 
 # binarizing train and test set
-train_df, test_df, texture_mean, texture_mean_limits = binarize_limits('texture_mean', train_df, test_df, [15, 21.5])
-train_df, test_df, smoothness_mean, smoothness_mean_limits = binarize_limits('smoothness_mean', train_df, test_df, [0.880, 0.903])
-train_df, test_df, symmetry_mean, symmetry_mean_limits = binarize_limits('symmetry_mean', train_df, test_df, [0.148, 0.153])
-train_df, test_df, fractal_dimension_mean, fractal_dimension_mean_limits = binarize_limits('fractal_dimension_mean', train_df, test_df, [0.558, 0.572])
-train_df, test_df, texture_se, texture_se_limits = binarize_limits('texture_se', train_df, test_df, [0.82])
-train_df, test_df, perimeter_se, perimeter_se_limits = binarize_limits('perimeter_se', train_df, test_df, [4.12, 1.5])
-train_df, test_df, area_se, area_se_limits = binarize_limits('area_se', train_df, test_df, [17])
-train_df, test_df, smoothness_se, smoothness_se_limits = binarize_limits('smoothness_se', train_df, test_df, [0.01, 0.004])
-train_df, test_df, compactness_se, compactness_se_limits = binarize_limits('compactness_se', train_df, test_df, [0.011, 0.041])
-train_df, test_df, concavity_se, concavity_se_limits = binarize_limits('concavity_se', train_df, test_df, [0.0105])
-train_df, test_df, concave_points_se, concave_points_se_limits = binarize_limits('concave points_se', train_df, test_df, [0.0095])
-train_df, test_df, symmetry_se, symmetry_se_limits = binarize_limits('symmetry_se', train_df, test_df, [0.014])
-train_df, test_df, fractal_dimension_se, fractal_dimension_se_limits = binarize_limits('fractal_dimension_se', train_df, test_df, [0.003, 0.0052])
-train_df, test_df, perimeter_worst, perimeter_worst_limits = binarize_limits('perimeter_worst', train_df, test_df, [98, 117, 103])
-train_df, test_df, smoothness_worst, smoothness_worst_limits = binarize_limits('smoothness_worst', train_df, test_df, [0.135, 0.14])
-train_df, test_df, concavity_worst, concavity_worst_limits = binarize_limits('concavity_worst', train_df, test_df, [0.19, 0.21, 0.37])
-train_df, test_df, concave_points_worst, concave_points_worst_limits = binarize_limits('concave points_worst', train_df, test_df, [0.114, 0.15])
-train_df, test_df, symmetry_worst, symmetry_worst_limits = binarize_limits('symmetry_worst', train_df, test_df, [0.33, 0.265])
-train_df, test_df, fractal_dimension_worst, fractal_dimension_worst_limits = binarize_limits('fractal_dimension_worst', train_df, test_df, [0.093])
+df_train, df_test, S011 = binarize_limits('S011', df_train, df_test, [-0.025])
+df_train, df_test, X028 = binarize_limits('X028', df_train, df_test, [-0.017, -0.024])
+df_train, df_test, X051 = binarize_limits('X051', df_train, df_test, [0.18])
+df_train, df_test, X099 = binarize_limits('X099', df_train, df_test, [0.35])
+df_train, df_test, X103 = binarize_limits('X103', df_train, df_test, [0.52, 0.13])
+df_train, df_test, X110 = binarize_limits('X110', df_train, df_test, [-0.115, -0.1])
+df_train, df_test, X113 = binarize_limits('X113', df_train, df_test, [0.09, -0.05])
+df_train, df_test, X121 = binarize_limits('X121', df_train, df_test, [0.025, 0.1])
+df_train, df_test, X132 = binarize_limits('X132', df_train, df_test, [-0.1, 0.02, 0.1]) # cis hud
+df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [-0.16, 0.17])
+df_train, df_test, X157 = binarize_limits('X157', df_train, df_test, [-0.05, 0.056, 0.08])
+df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [0.22])
+df_train, df_test, X201 = binarize_limits('X201', df_train, df_test, [-0.15, 0.03, 0.06])
+df_train, df_test, X210 = binarize_limits('X210', df_train, df_test, [0.02, 0.04])
+df_train, df_test, X221 = binarize_limits('X221', df_train, df_test, [-0.2])
+df_train, df_test, X229 = binarize_limits('X229', df_train, df_test, [-0.05, 0.05, 0.01])
+df_train, df_test, X247 = binarize_limits('X247', df_train, df_test, [-0.01, 0.35]) # 0.4
+df_train, df_test, X272 = binarize_limits('X272', df_train, df_test, [-0.04, 0.02])
+df_train, df_test, X277 = binarize_limits('X277', df_train, df_test, [-0.28, -0.15, -0.04, 0.1])
+df_train, df_test, X278 = binarize_limits('X278', df_train, df_test, [0.5])
 
-print('number of features = %d' % len(train_df.columns))
+print('1. n_features = %d' % len(df_train.columns))
 
-# selecting stumps and updating feature names
-selected_features = stump_selection(0.55, train_df, output_file)
+# binary valued feature selection
+selected_features = stump_selection(0.001, df_train, output_file)
+df_train = df_train[selected_features]
+df_test = df_test[selected_features]
 
-train_df = train_df[selected_features]
-test_df = test_df[selected_features]
+print('2. n_features = %d' % len(df_train.columns))
 
-texture_mean = fix_names(texture_mean, selected_features)
-smoothness_mean = fix_names(smoothness_mean, selected_features)
-symmetry_mean = fix_names(symmetry_mean, selected_features)
-fractal_dimension_mean = fix_names(fractal_dimension_mean, selected_features)
-texture_se = fix_names(texture_se, selected_features)
-perimeter_se = fix_names(perimeter_se, selected_features)
-area_se = fix_names(area_se, selected_features)
-smoothness_se = fix_names(smoothness_se, selected_features)
-compactness_se = fix_names(compactness_se, selected_features)
-concavity_se = fix_names(concavity_se, selected_features)
-concave_points_se = fix_names(concave_points_se, selected_features)
-symmetry_se = fix_names(symmetry_se, selected_features)
-fractal_dimension_se = fix_names(fractal_dimension_se, selected_features)
-perimeter_worst = fix_names(perimeter_worst, selected_features)
-smoothness_worst = fix_names(smoothness_worst, selected_features)
-concavity_worst = fix_names(concavity_worst, selected_features)
-concave_points_worst = fix_names(concave_points_worst, selected_features)
-symmetry_worst = fix_names(symmetry_worst, selected_features)
-fractal_dimension_worst = fix_names(fractal_dimension_worst, selected_features)
-
-# saving processed data
-train_df.to_csv('risk_slim/train_data.csv', sep=',', index=False,header=True)
-test_df.to_csv('risk_slim/test_data.csv', sep=',', index=False,header=True)
+S011 = fix_names(S011, selected_features)
+X028 = fix_names(X028, selected_features)
+X051 = fix_names(X051, selected_features)
+X099 = fix_names(X099, selected_features)
+X103 = fix_names(X103, selected_features)
+X110 = fix_names(X110, selected_features)
+X113 = fix_names(X113, selected_features)
+X121 = fix_names(X121, selected_features)
+X132 = fix_names(X132, selected_features)
+X144 = fix_names(X144, selected_features)
+X157 = fix_names(X157, selected_features)
+X162 = fix_names(X162, selected_features)
+X201 = fix_names(X201, selected_features)
+X210 = fix_names(X210, selected_features)
+X221 = fix_names(X221, selected_features)
+X229 = fix_names(X229, selected_features)
+X247 = fix_names(X247, selected_features)
+X272 = fix_names(X272, selected_features)
+X277 = fix_names(X277, selected_features)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -130,38 +194,36 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'texture_mean' : texture_mean,
-    'smoothness_mean' : smoothness_mean,
-    'symmetry_mean' : symmetry_mean,
-    'fractal_dimension_mean' : fractal_dimension_mean,
-    'texture_se' : texture_se,
-    'perimeter_se' : perimeter_se,
-    'area_se' : area_se,
-    'smoothness_se' : smoothness_se,
-    'compactness_se' : compactness_se,
-    'concavity_se' : concavity_se,
-    'concave_points_se' : concave_points_se,
-    'symmetry_se' : symmetry_se,
-    'fractal_dimension_se' : fractal_dimension_se,
-    'perimeter_worst' : perimeter_worst,
-    'smoothness_worst' : smoothness_worst,
-    'concavity_worst' : concavity_worst,
-    'concave_points_worst' : concave_points_worst,
-    'symmetry_worst' : symmetry_worst,
-    'fractal_dimension_worst' : fractal_dimension_worst,
+    'S011': S011,
+    'X028': X028,
+    'X051': X051,
+    'X099': X099,
+    'X103': X103,
+    'X110': X110,
+    'X113': X113,
+    'X121': X121,
+    'X132': X132,
+    'X144': X144,
+    'X157': X157,
+    'X162': X162,
+    'X201': X201,
+    'X210': X210,
+    'X221': X221,
+    'X229': X229,
+    'X247': X247,
+    'X272': X272,
+    'X277': X277,
 }
 
 # preparing data
-df_train  = pd.read_csv('risk_slim/train_data.csv', float_precision='round_trip')
-df_test  = pd.read_csv('risk_slim/test_data.csv', float_precision='round_trip')
-
-X_train = df_train.iloc[:, 1:].values
+X_train = df_train.iloc[:,1:].values
 y_train = df_train.iloc[:,0].values
-X_test = df_test.iloc[:, 1:].values
+X_test = df_test.iloc[:,1:].values
 y_test = df_test.iloc[:,0].values
+data_headers = df_train.columns
 
 # cross validating
-rm = RiskModel(data_headers=df_train.columns.values, params=params, settings=settings, op_constraints=op_constraints)
+rm = RiskModel(data_headers=data_headers, params=params, settings=settings, op_constraints=op_constraints)
 cv_result, build_times, opt_gaps = riskslim_cv(n_folds,rm, X_train, y_train)
 
 # fitting model

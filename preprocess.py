@@ -40,7 +40,7 @@ def binarize_limits(feature_name, train_df, test_df, limits):
 			subfeatures_names.append(bin_feature)
 		index+=1
 
-	return train_df, test_df, subfeatures_names, limits
+	return train_df, test_df, subfeatures_names
 
 def sec2time(seconds):
 
@@ -100,11 +100,7 @@ def stump_selection(C, train_df, file):
 	selected_features = list(X_labels[selector.get_support()])
 	selected_features.insert(0, y_label)
 	removed_features = np.setdiff1d(X_labels, selected_features)
-
-	# printing removed features
-	file.write("Removed stumps (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
-	for r in removed_features:
-		file.write(" %s\n" % r)
+	print("Removed stumps (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
 
 	return selected_features
 
