@@ -88,14 +88,14 @@ def find_treshold_index(tresholds, my_treshold):
 
     return index
 
-def stump_selection(C, train_df, file):
+def stump_selection(C, train_df):
 
 	X_labels = train_df.columns[1:]
 	y_label = train_df.columns[0]
 	X = train_df[X_labels]
 	y = train_df[y_label]
 
-	selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1'))
+	selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0))
 	selector.fit(X, y)
 	selected_features = list(X_labels[selector.get_support()])
 	selected_features.insert(0, y_label)
