@@ -196,3 +196,16 @@ class RiskModel(BaseEstimator):
             y[i] = float(1.0/(1.0 + math.exp(-(self.intercept_val + score))))
 
         return y
+
+    def decision_function(self, X):
+
+        X = check_array(X, accept_sparse=True)
+        X = X[:,self.filter_mask]
+
+        scores = np.round(np.squeeze(np.asarray(np.dot(X, self.rho_values.T))))
+        y = np.array(scores)
+
+        for i,score in enumerate(scores):
+            y[i] = self.intercept_val + score
+
+        return y
