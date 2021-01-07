@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+from prettytable import PrettyTable
 
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
@@ -106,6 +107,21 @@ def stump_selection(C, train_df):
 
 def fix_names(names, selected_features):
 	return list(set(names) & set(selected_features))
+
+def print_cv_results(results):
+
+    print('CV accuracy = %.3f' % np.array(results['accuracy']).mean())
+    print('CV build time = %s' % sec2time(np.array(results['build_times']).mean()))
+    print('CV optimality = %.3f' % np.array(results['optimality_gaps']).mean())
+
+    if len(results['recall_1']) != 0:
+
+        table = PrettyTable()
+        table.field_names = ['metrics','1', '0']
+        table.add_row(['recall', '%.3f' % np.array(results['recall_1']).mean(), '%.3f' % np.array(results['recall_0']).mean()])
+        table.add_row(['precision', '%.3f' % np.array(results['precision_1']).mean(), '%.3f' % np.array(results['precision_0']).mean()])
+        table.add_row(['f1', '%.3f' % np.array(results['f1_1']).mean(), '%.3f' % np.array(results['f1_0']).mean()])
+        print(table)
 
 
 if __name__ == "__main__":
