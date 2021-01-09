@@ -143,7 +143,8 @@ class RiskModel(BaseEstimator):
         rho = model_info['solution']
         self.model_info = model_info
 
-        print_model(model_info['solution'], self.data)
+        if np.sum(rho[1:]) != 0:
+            print_model(model_info['solution'], self.data)
         print("solver_time = %d" % model_info['solver_time'])
         print("optimality_gap = %.3f" % model_info['optimality_gap'])
         print(rho)
