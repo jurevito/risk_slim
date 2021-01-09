@@ -28,10 +28,10 @@ import time
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'Disease-BIN.hd5'
+file = 'Disease-MUL.hd5'
 test_size = 0.2
 n_folds = 5
-max_runtime = 20.0
+max_runtime = 1.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file
@@ -73,8 +73,8 @@ df_test.columns = tmp2.columns
 df_test.index = tmp2.index
 
 # remove highly coorelated features
-df_train = df_train.drop(['X212','X094','X109','X213','X273','X097'], axis=1)
-df_test = df_test.drop(['X212','X094','X109','X213','X273','X097'], axis=1)
+df_train = df_train.drop(['X212','X094','X109','X213','X273','X096','X095','X138','X121','X107'], axis=1)
+df_test = df_test.drop(['X212','X094','X109','X213','X273','X096','X095','X138','X121','X107'], axis=1)
 
 corr_lower = 0.85
 corr = df_train.corr().abs()
@@ -84,34 +84,34 @@ so = so[(so > corr_lower) & (so < 1.0)]
 print(so)
 
 # real valued feature selection
-selected_features = stump_selection(0.7, df_train)
+selected_features = stump_selection(0.03, df_train)
 df_train = df_train[selected_features]
 df_test = df_test[selected_features]
 
 # binarizing train and test set
-df_train, df_test, S011 = binarize_limits('S011', df_train, df_test, [-0.024, 0.18])
-df_train, df_test, X051 = binarize_limits('X051', df_train, df_test, [0.037, -0.035])
-df_train, df_test, X103 = binarize_limits('X103', df_train, df_test, [0.52])
-df_train, df_test, X111 = binarize_limits('X111', df_train, df_test, [0.2])
-df_train, df_test, X118 = binarize_limits('X118', df_train, df_test, [-0.04, 0.1])
-df_train, df_test, X127 = binarize_limits('X127', df_train, df_test, [0, 0.22])
-df_train, df_test, X132 = binarize_limits('X132', df_train, df_test, [-0.1, 0.01, -0.02])
-df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [0.18, -0.14, 0.16])
-df_train, df_test, X149 = binarize_limits('X149', df_train, df_test, [-0.1])
-df_train, df_test, X157 = binarize_limits('X157', df_train, df_test, [-0.06, 0.08])
-df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [0.23, 0.2])
-df_train, df_test, X172 = binarize_limits('X172', df_train, df_test, [0.02, -0.18])
-df_train, df_test, X173 = binarize_limits('X173', df_train, df_test, [-0.225, 0.26])
-df_train, df_test, X177 = binarize_limits('X177', df_train, df_test, [0.46])
-df_train, df_test, X201 = binarize_limits('X201', df_train, df_test, [0.01, 0.08])
-df_train, df_test, X210 = binarize_limits('X210', df_train, df_test, [-0.11, 0.03])
-df_train, df_test, X211 = binarize_limits('X211', df_train, df_test, [0, 0.85])
-df_train, df_test, X215 = binarize_limits('X215', df_train, df_test, [0.025])
-df_train, df_test, X221 = binarize_limits('X221', df_train, df_test, [-0.2])
-df_train, df_test, X229 = binarize_limits('X229', df_train, df_test, [0.03, 0.13])
-df_train, df_test, X247 = binarize_limits('X247', df_train, df_test, [0.3])
-df_train, df_test, X272 = binarize_limits('X272', df_train, df_test, [-0.3, -0.17])
-df_train, df_test, X277 = binarize_limits('X277', df_train, df_test, [0.255])
+df_train, df_test, X028 = binarize_limits('X028', df_train, df_test, [-0.01])
+df_train, df_test, X051 = binarize_limits('X051', df_train, df_test, [-0.05, 0.045])
+df_train, df_test, X103 = binarize_limits('X103', df_train, df_test, [-0.178, 0.1])
+df_train, df_test, X111 = binarize_limits('X111', df_train, df_test, [-0.23, 0.12])
+df_train, df_test, X118 = binarize_limits('X118', df_train, df_test, [-0.086, 0.051])
+df_train, df_test, X127 = binarize_limits('X127', df_train, df_test, [0.115, -0.061])
+df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [-0.06, -0.16, 0.025])
+df_train, df_test, X146 = binarize_limits('X146', df_train, df_test, [-0.23, 0.13])
+df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [-0.2, 0.04])
+df_train, df_test, X172 = binarize_limits('X172', df_train, df_test, [0.17, 0.05])
+df_train, df_test, X173 = binarize_limits('X173', df_train, df_test, [0.06, -0.055])
+df_train, df_test, X174 = binarize_limits('X174', df_train, df_test, [-0.1, 0.04])
+df_train, df_test, X175 = binarize_limits('X175', df_train, df_test, [-0.31, 0.16])
+df_train, df_test, X180 = binarize_limits('X180', df_train, df_test, [0.135, 0.2, -0.12])
+df_train, df_test, X201 = binarize_limits('X201', df_train, df_test, [0.23, -0.08])
+df_train, df_test, X210 = binarize_limits('X210', df_train, df_test, [0, 0.124, -0.12])
+df_train, df_test, X215 = binarize_limits('X215', df_train, df_test, [0.065, -0.03, 0.23])
+df_train, df_test, X221 = binarize_limits('X221', df_train, df_test, [0.05, -0.23])
+df_train, df_test, X247 = binarize_limits('X247', df_train, df_test, [-0.05, 0, 0.02])
+df_train, df_test, X266 = binarize_limits('X266', df_train, df_test, [-0.05, 0.065, 0])
+df_train, df_test, X271 = binarize_limits('X271', df_train, df_test, [0.05, -0.02, -0.11])
+df_train, df_test, X272 = binarize_limits('X272', df_train, df_test, [0.1, -0.1])
+df_train, df_test, X277 = binarize_limits('X277', df_train, df_test, [-0.33])
 df_train, df_test, X278 = binarize_limits('X278', df_train, df_test, [0.5])
 
 print('1. n_features = %d' % len(df_train.columns))
@@ -123,27 +123,27 @@ df_test = df_test[selected_features]
 
 print('2. n_features = %d' % len(df_train.columns))
 
-S011 = fix_names(S011, selected_features)
+X028 = fix_names(X028, selected_features)
 X051 = fix_names(X051, selected_features)
 X103 = fix_names(X103, selected_features)
 X111 = fix_names(X111, selected_features)
 X118 = fix_names(X118, selected_features)
 X127 = fix_names(X127, selected_features)
-X132 = fix_names(X132, selected_features)
 X144 = fix_names(X144, selected_features)
-X149 = fix_names(X149, selected_features)
-X157 = fix_names(X157, selected_features)
+X146 = fix_names(X146, selected_features)
 X162 = fix_names(X162, selected_features)
 X172 = fix_names(X172, selected_features)
 X173 = fix_names(X173, selected_features)
-X177 = fix_names(X177, selected_features)
+X174 = fix_names(X174, selected_features)
+X175 = fix_names(X175, selected_features)
+X180 = fix_names(X180, selected_features)
 X201 = fix_names(X201, selected_features)
 X210 = fix_names(X210, selected_features)
-X211 = fix_names(X211, selected_features)
 X215 = fix_names(X215, selected_features)
 X221 = fix_names(X221, selected_features)
-X229 = fix_names(X229, selected_features)
 X247 = fix_names(X247, selected_features)
+X266 = fix_names(X266, selected_features)
+X271 = fix_names(X271, selected_features)
 X272 = fix_names(X272, selected_features)
 X277 = fix_names(X277, selected_features)
 X278 = fix_names(X278, selected_features)
@@ -185,30 +185,30 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'S011': S011,
+    'X028': X028,
     'X051': X051,
     'X103': X103,
     'X111': X111,
     'X118': X118,
     'X127': X127,
-    'X132': X132,
     'X144': X144,
-    'X149': X149,
-    'X157': X157,
+    'X146': X146,
     'X162': X162,
     'X172': X172,
     'X173': X173,
-    'X177': X177,
+    'X174': X174,
+    'X175': X175,
+    'X180': X180,
     'X201': X201,
     'X210': X210,
-    'X211': X211,
     'X215': X215,
     'X221': X221,
-    'X229': X229,
     'X247': X247,
+    'X266': X266,
+    'X271': X271,
     'X272': X272,
     'X277': X277,
-    'X278': X278,
+#   'X278': X278,
 }
 
 # preparing data
@@ -219,7 +219,8 @@ y_test = df_test.iloc[:,0].values
 data_headers = df_train.columns
 
 
-rm = RiskModel(data_headers=data_headers, params=params, settings=settings, op_constraints=op_constraints)
+model = RiskModel(data_headers=data_headers, params=params, settings=settings, op_constraints=op_constraints)
+rm = OneVsRestClassifier(model)
 
 # cross validating
 kf = StratifiedKFold(n_splits = n_folds, shuffle = True, random_state = 0)
@@ -233,6 +234,8 @@ results = {
     'precision_0': [],
     'f1_1': [],
     'f1_0': [],
+    'f1_macro': [],
+    'f1_micro': [],
 }
 
 for train_index, valid_index in kf.split(X_train, y_train):
@@ -247,15 +250,20 @@ for train_index, valid_index in kf.split(X_train, y_train):
     y_pred = rm.predict(X_valid_cv)
 
     results['accuracy'].append(accuracy_score(y_valid_cv, y_pred))
-    results['recall_1'].append(recall_score(y_valid_cv, y_pred, pos_label=1))
-    results['recall_0'].append(recall_score(y_valid_cv, y_pred, pos_label=0))
-    results['precision_1'].append(precision_score(y_valid_cv, y_pred, pos_label=1))
-    results['precision_0'].append(precision_score(y_valid_cv, y_pred, pos_label=0))
-    results['f1_1'].append(f1_score(y_valid_cv, y_pred, pos_label=1))
-    results['f1_0'].append(f1_score(y_valid_cv, y_pred, pos_label=0))
 
-    results['build_times'].append(rm.model_info['solver_time'])
-    results['optimality_gaps'].append(rm.model_info['optimality_gap'])
+    n_classes = len(list(set(y_pred)))
+    if n_classes < 3:
+        results['recall_1'].append(recall_score(y_valid_cv, y_pred, pos_label=1))
+        results['recall_0'].append(recall_score(y_valid_cv, y_pred, pos_label=0))
+        results['precision_1'].append(precision_score(y_valid_cv, y_pred, pos_label=1))
+        results['precision_0'].append(precision_score(y_valid_cv, y_pred, pos_label=0))
+        results['f1_1'].append(f1_score(y_valid_cv, y_pred, pos_label=1))
+        results['f1_0'].append(f1_score(y_valid_cv, y_pred, pos_label=0))
+        results['build_times'].append(rm.model_info['solver_time'])
+        results['optimality_gaps'].append(rm.model_info['optimality_gap'])
+    else:
+        results['f1_macro'].append(f1_score(y_valid_cv, y_pred, average='macro'))
+        results['f1_micro'].append(f1_score(y_valid_cv, y_pred, average='micro'))
 
 # fitting model
 rm.fit(X_train,y_train)
