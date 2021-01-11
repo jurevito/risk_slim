@@ -28,7 +28,7 @@ import time
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'diabetes.csv'
+file = 'breast.csv'
 test_size = 0.2
 n_folds = 5
 max_runtime = 3600.0
@@ -37,44 +37,35 @@ os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file
 df  = pd.read_csv(path, float_precision='round_trip')
 
-# move outcome at beginning
-outcome_values = df['Outcome'].values
-df = df.drop(['Outcome'], axis=1)
-df.insert(0, 'Outcome', outcome_values, True)
-
-# 0 to nan
-df['Glucose'] = df['Glucose'].replace(0, np.nan)
-df['BloodPressure'] = df['BloodPressure'].replace(0, np.nan)
-df['SkinThickness'] = df['SkinThickness'].replace(0, np.nan)
-df['Insulin'] = df['Insulin'].replace(0, np.nan)
-df['BMI'] = df['BMI'].replace(0, np.nan)
-df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
+# removing highly coorelated features
+df = df.drop(['radius_worst', 'radius_mean','area_worst','perimeter_mean','area_mean'], axis=1)
+df = df.drop(['texture_worst','concave points_mean','radius_se'], axis=1)
+df = df.drop(['compactness_mean','compactness_worst','concavity_mean'], axis=1)
 
 # split data
 df = shuffle(df, random_state=1)
-df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['Outcome'])
-
-# data imputation
-tmp1 = df_train
-tmp2 = df_test
-imputer = KNNImputer(n_neighbors=2, weights="uniform")
-df_train = pd.DataFrame(imputer.fit_transform(df_train))
-df_test = pd.DataFrame(imputer.transform(df_test))
-
-df_train.columns = tmp1.columns
-df_train.index = tmp1.index
-df_test.columns = tmp2.columns
-df_test.index = tmp2.index
+df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['diagnosis'])
 
 # binarizing train and test set
-df_train, df_test, Pregnancies = binarize_limits('Pregnancies', df_train, df_test, [7, 13])
-df_train, df_test, Glucose = binarize_limits('Glucose', df_train, df_test, [155, 166, 121, 130])
-df_train, df_test, BloodPressure = binarize_limits('BloodPressure', df_train, df_test, [55, 92, 100])
-df_train, df_test, SkinThickness = binarize_limits('SkinThickness', df_train, df_test, [15, 22, 32])
-df_train, df_test, Insulin = binarize_limits('Insulin', df_train, df_test, [80, 126, 330])
-df_train, df_test, BMI = binarize_limits('BMI', df_train, df_test, [25, 45])
-df_train, df_test, DiabetesPedigreeFunction = binarize_limits('DiabetesPedigreeFunction', df_train, df_test, [1.35, 0.19])
-df_train, df_test, Age = binarize_limits('Age', df_train, df_test, [63, 42, 23, 53])
+df_train, df_test, texture_mean = binarize_limits('texture_mean', df_train, df_test, [15, 22])
+df_train, df_test, smoothness_mean = binarize_limits('smoothness_mean', df_train, df_test, [0.085, 0.116])
+df_train, df_test, symmetry_mean = binarize_limits('symmetry_mean', df_train, df_test, [0.15])
+df_train, df_test, fractal_dimension_mean = binarize_limits('fractal_dimension_mean', df_train, df_test, [0.053, 0.073])
+df_train, df_test, texture_se = binarize_limits('texture_se', df_train, df_test, [2.3])
+df_train, df_test, perimeter_se = binarize_limits('perimeter_se', df_train, df_test, [1.4, 3, 4.1])
+df_train, df_test, area_se = binarize_limits('area_se', df_train, df_test, [19, 36])
+df_train, df_test, smoothness_se = binarize_limits('smoothness_se', df_train, df_test, [0.022, 0.003])
+df_train, df_test, compactness_se = binarize_limits('compactness_se', df_train, df_test, [0.045])
+df_train, df_test, concavity_se = binarize_limits('concavity_se', df_train, df_test, [0.01, 0.17])
+df_train, df_test, concave_points_se = binarize_limits('concave points_se', df_train, df_test, [0.021])
+df_train, df_test, symmetry_se = binarize_limits('symmetry_se', df_train, df_test, [0.045, 0.011])
+df_train, df_test, fractal_dimension_se = binarize_limits('fractal_dimension_se', df_train, df_test, [0.013, 0.0047])
+df_train, df_test, perimeter_worst = binarize_limits('perimeter_worst', df_train, df_test, [100, 115])
+df_train, df_test, smoothness_worst = binarize_limits('smoothness_worst', df_train, df_test, [0.18, 0.14])
+df_train, df_test, concavity_worst = binarize_limits('concavity_worst', df_train, df_test, [0.19, 0.27])
+df_train, df_test, concave_points_worst = binarize_limits('concave points_worst', df_train, df_test, [0.14, 0.15])
+df_train, df_test, symmetry_worst = binarize_limits('symmetry_worst', df_train, df_test, [0.2, 0.37])
+df_train, df_test, fractal_dimension_worst = binarize_limits('fractal_dimension_worst', df_train, df_test, [0.09, 0.1])
 
 print('1. n_features = %d' % len(df_train.columns))
 
@@ -85,14 +76,25 @@ df_test = df_test[selected_features]
 
 print('2. n_features = %d' % len(df_train.columns))
 
-Pregnancies = fix_names(Pregnancies, selected_features)
-Glucose = fix_names(Glucose, selected_features)
-BloodPressure = fix_names(BloodPressure, selected_features)
-SkinThickness = fix_names(SkinThickness, selected_features)
-Insulin = fix_names(Insulin, selected_features)
-BMI = fix_names(BMI, selected_features)
-DiabetesPedigreeFunction = fix_names(DiabetesPedigreeFunction, selected_features)
-Age = fix_names(Age, selected_features)
+texture_mean = fix_names(texture_mean, selected_features)
+smoothness_mean = fix_names(smoothness_mean, selected_features)
+symmetry_mean = fix_names(symmetry_mean, selected_features)
+fractal_dimension_mean = fix_names(fractal_dimension_mean, selected_features)
+texture_se = fix_names(texture_se, selected_features)
+perimeter_se = fix_names(perimeter_se, selected_features)
+area_se = fix_names(area_se, selected_features)
+smoothness_se = fix_names(smoothness_se, selected_features)
+compactness_se = fix_names(compactness_se, selected_features)
+concavity_se = fix_names(concavity_se, selected_features)
+concave_points_se = fix_names(concave_points_se, selected_features)
+symmetry_se = fix_names(symmetry_se, selected_features)
+fractal_dimension_se = fix_names(fractal_dimension_se, selected_features)
+perimeter_worst = fix_names(perimeter_worst, selected_features)
+smoothness_worst = fix_names(smoothness_worst, selected_features)
+concavity_worst = fix_names(concavity_worst, selected_features)
+concave_points_worst = fix_names(concave_points_worst, selected_features)
+symmetry_worst = fix_names(symmetry_worst, selected_features)
+fractal_dimension_worst = fix_names(fractal_dimension_worst, selected_features)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -131,14 +133,25 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'Pregnancies': Pregnancies,
-    'Glucose': Glucose,
-    'BloodPressure': BloodPressure,
-    'SkinThickness': SkinThickness,
-    'Insulin': Insulin,
-    'BMI': BMI,
-    'DiabetesPedigreeFunction': DiabetesPedigreeFunction,
-    'Age': Age,
+    'texture_mean': texture_mean,
+    'smoothness_mean': smoothness_mean,
+    'symmetry_mean': symmetry_mean,
+    'fractal_dimension_mean': fractal_dimension_mean,
+    'texture_se': texture_se,
+    'perimeter_se': perimeter_se,
+    'area_se': area_se,
+    'smoothness_se': smoothness_se,
+    'compactness_se': compactness_se,
+    'concavity_se': concavity_se,
+    'concave_points_se': concave_points_se,
+    'symmetry_se': symmetry_se,
+    'fractal_dimension_se': fractal_dimension_se,
+    'perimeter_worst': perimeter_worst,
+    'smoothness_worst': smoothness_worst,
+    'concavity_worst': concavity_worst,
+    'concave_points_worst': concave_points_worst,
+    'symmetry_worst': symmetry_worst,
+    'fractal_dimension_worst': fractal_dimension_worst,
 }
 
 # preparing data
