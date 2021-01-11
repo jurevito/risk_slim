@@ -131,6 +131,27 @@ def print_cv_results(results):
     	table.add_row(['micro f1', '%.3f' % np.array(results['f1_micro']).mean()])
     	print(table)
 
+def binarize_sex(feature_name, class1_name, class2_name, df_train, df_test):
+
+	# train
+	data_train = df_train[feature_name].to_numpy()
+
+	index = df_train.columns.get_loc(feature_name)
+	df_train.drop(feature_name, axis=1, inplace=True)
+
+	df_train.insert(index, class1_name, 1 - data_train, True)
+	df_train.insert(index+1, class2_name, data_train, True)
+
+	# test
+	data_test = df_test[feature_name].to_numpy()
+
+	index = df_test.columns.get_loc(feature_name)
+	df_test.drop(feature_name, axis=1, inplace=True)
+
+	df_test.insert(index, class1_name, 1 - data_test, True)
+	df_test.insert(index+1, class2_name, data_test, True)
+
+	return df_train, df_test, [class1_name, class2_name]
 
 if __name__ == "__main__":
 
