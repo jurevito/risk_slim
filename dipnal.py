@@ -28,7 +28,7 @@ import time
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'heart.csv'
+file = 'diabetes.csv'
 test_size = 0.2
 n_folds = 5
 max_runtime = 3600.0
@@ -38,37 +38,61 @@ path = os.getcwd() + '/risk-slim/examples/data/' + file
 df  = pd.read_csv(path, float_precision='round_trip')
 
 # move outcome at beginning
-outcome_values = df['target'].values
-df = df.drop(['target'], axis=1)
-df.insert(0, 'target', outcome_values, True)
+outcome_values = df['Outcome'].values
+df = df.drop(['Outcome'], axis=1)
+df.insert(0, 'Outcome', outcome_values, True)
+
+# 0 to nan
+df['Glucose'] = df['Glucose'].replace(0, np.nan)
+df['BloodPressure'] = df['BloodPressure'].replace(0, np.nan)
+df['SkinThickness'] = df['SkinThickness'].replace(0, np.nan)
+df['Insulin'] = df['Insulin'].replace(0, np.nan)
+df['BMI'] = df['BMI'].replace(0, np.nan)
+df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
 
 # split data
 df = shuffle(df, random_state=1)
-df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['target'])
+df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['Outcome'])
+
+# data imputation
+tmp1 = df_train
+tmp2 = df_test
+imputer = KNNImputer(n_neighbors=2, weights="uniform")
+df_train = pd.DataFrame(imputer.fit_transform(df_train))
+df_test = pd.DataFrame(imputer.transform(df_test))
+
+df_train.columns = tmp1.columns
+df_train.index = tmp1.index
+df_test.columns = tmp2.columns
+df_test.index = tmp2.index
 
 # binarizing train and test set
-df_train, df_test, age_features = binarize_limits('age', df_train, df_test, [39, 46, 58, 63, 67])
-df_train, df_test, trestbps_features = binarize_limits('trestbps', df_train, df_test, [105, 150, 172])
-df_train, df_test, chol_features = binarize_limits('chol', df_train, df_test, [175, 225, 330])
-df_train, df_test, thalach_features = binarize_limits('thalach', df_train, df_test, [96, 140, 175, 184])
-df_train, df_test, oldpeak_features = binarize_limits('oldpeak', df_train, df_test, [0.5, 2.4, 3.5])
-df_train, df_test, sex_features = binarize_sex('sex', 'Female', 'Male', df_train, df_test)
+df_train, df_test, Pregnancies = binarize_limits('Pregnancies', df_train, df_test, [7, 13])
+df_train, df_test, Glucose = binarize_limits('Glucose', df_train, df_test, [155, 166, 121, 130])
+df_train, df_test, BloodPressure = binarize_limits('BloodPressure', df_train, df_test, [55, 92, 100])
+df_train, df_test, SkinThickness = binarize_limits('SkinThickness', df_train, df_test, [15, 22, 32])
+df_train, df_test, Insulin = binarize_limits('Insulin', df_train, df_test, [80, 126, 330])
+df_train, df_test, BMI = binarize_limits('BMI', df_train, df_test, [25, 45])
+df_train, df_test, DiabetesPedigreeFunction = binarize_limits('DiabetesPedigreeFunction', df_train, df_test, [1.35, 0.19])
+df_train, df_test, Age = binarize_limits('Age', df_train, df_test, [63, 42, 23, 53])
 
 print('1. n_features = %d' % len(df_train.columns))
 
 # binary valued feature selection
-selected_features = stump_selection(0.7, df_train)
+selected_features = stump_selection(0.8, df_train)
 df_train = df_train[selected_features]
 df_test = df_test[selected_features]
 
 print('2. n_features = %d' % len(df_train.columns))
 
-age_features = fix_names(age_features, selected_features)
-trestbps_features = fix_names(trestbps_features, selected_features)
-chol_features = fix_names(chol_features, selected_features)
-thalach_features = fix_names(thalach_features, selected_features)
-oldpeak_features = fix_names(oldpeak_features, selected_features)
-sex_features = fix_names(sex_features, selected_features)
+Pregnancies = fix_names(Pregnancies, selected_features)
+Glucose = fix_names(Glucose, selected_features)
+BloodPressure = fix_names(BloodPressure, selected_features)
+SkinThickness = fix_names(SkinThickness, selected_features)
+Insulin = fix_names(Insulin, selected_features)
+BMI = fix_names(BMI, selected_features)
+DiabetesPedigreeFunction = fix_names(DiabetesPedigreeFunction, selected_features)
+Age = fix_names(Age, selected_features)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -107,12 +131,14 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'age_features': age_features,
-    'trestbps_features': trestbps_features,
-    'chol_features': chol_features,
-    'thalach_features': thalach_features,
-    'oldpeak_features': oldpeak_features,
-    'sex_features': sex_features,
+    'Pregnancies': Pregnancies,
+    'Glucose': Glucose,
+    'BloodPressure': BloodPressure,
+    'SkinThickness': SkinThickness,
+    'Insulin': Insulin,
+    'BMI': BMI,
+    'DiabetesPedigreeFunction': DiabetesPedigreeFunction,
+    'Age': Age,
 }
 
 # preparing data
