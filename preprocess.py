@@ -8,6 +8,98 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import Lasso, LogisticRegression
 from sklearn.feature_selection import SelectFromModel
 
+from interpret.glassbox import ExplainableBoostingClassifier
+
+def ebm_binarization(df_train, df_test, n_features, type='all', feature_names=None):
+
+	headers = df_train.columns[1:].values
+	names = []
+	feature_dict = {}
+
+	if type == 'all':
+		names = headers
+
+	elif type == 'exclude':
+		names = list(set(headers) - set(feature_names))
+
+	elif type == 'include':
+		names = feature_names
+
+	else:
+		print('ERROR: Wrong binarization "Type" value.')
+
+
+	# train EBM model
+	X_labels = df_train.columns[1:]
+	y_label = df_train.columns[0]
+
+	X_train = df_train[X_labels]
+	y_train = df_train[y_label]
+
+	ebm = ExplainableBoostingClassifier(random_state=0)
+	ebm.fit(X_train, y_train)
+	ebm_global = ebm.explain_global(name='EBM')
+
+	# search limits for each feature
+	for i,feature in enumerate(X_train.columns.values):
+		if feature in names:
+			
+			graph = ebm_global.data(i)
+			step = round(len(graph['scores'])/10)+1
+
+			jumps = []
+			limits = []
+
+			# find limits
+			for k in range(0,len(graph['scores'])-step,round(step/2)):
+
+				#print('k = %d, k+step = %d' % (k, k+step))
+				jump_value = abs(graph['scores'][k] - graph['scores'][k+step])
+				limit_value = graph['names'][k] if abs(graph['scores'][k]) > abs(graph['scores'][k+step]) else graph['names'][k+step]
+				jumps.append(jump_value)
+				limits.append(limit_value)
+
+			jumps, limits = zip(*sorted(zip(jumps, limits)))
+
+			# binarize feature
+			df_train, df_test, bin_features  = binarize_limits(feature, df_train, df_test, list(limits)[-n_features:])	
+			feature_dict[feature] = bin_features
+
+
+	return df_train, df_test, feature_dict
+
+def auto_selection(max_features, df_train, df_test, feature_dict=None):
+
+	X_labels = df_train.columns[1:]
+	y_label = df_train.columns[0]
+	X = df_train[X_labels]
+	y = df_train[y_label]
+
+	n = 100
+	C = 4.0
+
+	while n > max_features:
+
+		selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0))
+		selector.fit(X, y)
+		selected_features = list(X_labels[selector.get_support()])
+		selected_features.insert(0, y_label)
+		removed_features = np.setdiff1d(X_labels, selected_features)
+
+		n = len(selected_features)
+		C = C*0.7
+	
+	
+	print("Removed stumps (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
+	df_train = df_train[selected_features]
+	df_test = df_test[selected_features]
+
+	# fix operation constraints
+	for key in feature_dict.keys():
+		feature_dict[key] = fix_names(feature_dict[key], selected_features)
+
+	return df_train, df_test, feature_dict
+
 def binarize_limits(feature_name, train_df, test_df, limits):
 
 	train_data = train_df[feature_name].to_numpy()
