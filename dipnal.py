@@ -18,122 +18,108 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.impute import KNNImputer
 from sklearn.linear_model import Lasso, LogisticRegression
 from sklearn.feature_selection import SelectFromModel
+from sklearn.metrics import precision_recall_curve, average_precision_score
+from sklearn.utils.class_weight import compute_sample_weight
 
-from preprocess import binarize_limits, sec2time, riskslim_cv, find_treshold_index, stump_selection, fix_names, print_cv_results, binarize_sex, ebm_binarization, auto_selection, auto_select
+from preprocess import binarize_limits, sec2time, find_treshold_index, stump_selection, fix_names, print_cv_results, binarize_sex
 from prettytable import PrettyTable
 
 from imblearn.combine import SMOTEENN
 from sklearn.multiclass import OneVsRestClassifier
 import time
 
-def OnevsRest_riskslim(df_train, df_test, params, settings):
-
-    predictions = np.zeros((1,len(df_test.index)))
-
-    for target_class in range(len(set(df_train['class'].values))):
-        print('class is %d' % target_class)
-
-        df_train_bin = df_train.copy()
-        df_test_bin = df_test.copy()
-        print(df_train_bin)
-        #df_train_bin = df_train
-        #df_test_bin = df_test
-
-        #print('1. number of ones in class (%d) = %d' % (target_class, len(df_train_bin[df_train_bin['class'] == target_class])))
-
-        df_train_bin['class'].values[df_train_bin['class'].values == target_class] = -1
-        df_train_bin['class'].values[(df_train_bin['class'].values != target_class) & (df_train_bin['class'].values != -1)] = 0
-        df_train_bin['class'].values[df_train_bin['class'].values == -1] = 1
-        df_test_bin['class'].values[df_test_bin['class'].values == target_class] = -1
-        df_test_bin['class'].values[(df_test_bin['class'].values != target_class) & (df_test_bin['class'].values != -1)] = 0
-        df_test_bin['class'].values[df_test_bin['class'].values == -1] = 1
-
-        #print('2. number of ones in class (%d) = %d' % (target_class, len(df_train_bin[df_train_bin['class'] == 1])))
-
-        selected_features = auto_select(30, df_train_bin)
-        df_train_bin = df_train_bin[selected_features]
-        df_test_bin = df_test_bin[selected_features]
-
-        df_train_bin, df_test_bin, feature_dict = ebm_binarization(df_train_bin, df_test_bin, 2, type='exclude', feature_names=['X278'])
-        df_train_bin, df_test_bin, feature_dict = auto_selection(18, df_train_bin, df_test_bin, feature_dict)
-        op_constraints = feature_dict
-
-        X_train = df_train_bin.iloc[:,1:].values
-        y_train = df_train_bin.iloc[:,0].values
-        X_test = df_test_bin.iloc[:,1:].values
-        y_test = df_test_bin.iloc[:,0].values
-        data_headers = df_train_bin.columns
-
-        rm = RiskModel(data_headers=data_headers, params=params, settings=settings, op_constraints=op_constraints)
-        rm.fit(X_train,y_train)
-        y_pred = rm.predict_proba(X_test)
-        predictions = np.concatenate((predictions, np.array([y_pred])), axis=0)
-
-
-    y_pred = np.zeros(len(df_test_bin))
-    for i in range(len(y_pred)):
-        arr = predictions[:,i]
-        y_pred[i] = np.where(arr == np.amax(arr))[0][0] - 1
-
-    print(predictions)
-
-    return y_pred
-
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'Disease-MUL.hd5'
+file = 'disease_bin_imputed.h5'
 test_size = 0.2
 n_folds = 5
 max_runtime = 10.0
-is_multiclass = True
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file
-hdf  = pd.HDFStore(path, mode='r')
-df = hdf.get('/Xy')
+df_train = pd.read_hdf(path, 'train')
+df_test = pd.read_hdf(path, 'test')
 
 # move outcome at beginning
-outcome_values = df['class'].values
-df = df.drop(['class'], axis=1)
-df.insert(0, 'class', outcome_values, True)
-
-# category to int
-LE = LabelEncoder()
-df['class'] = LE.fit_transform(df['class'])
-
-# show missing value percentage
-percent_missing = df.isnull().sum() * 100 / len(df)
-missing_value_df = pd.DataFrame({'column_name': df.columns, 'percent_missing': percent_missing})
-missing_value_df.sort_values('percent_missing', inplace=True)
-removed_features = list(missing_value_df.loc[missing_value_df['percent_missing'] >= 98.00, 'column_name'])
-print('total removed = %d (%.2f%%)' % (len(removed_features), (len(removed_features) / len(df.columns)*100)))
-df = df.drop(removed_features, axis=1)
-
-# split data
-df = shuffle(df, random_state=1)
-df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['class'])
-
-# data imputation
-tmp1 = df_train
-tmp2 = df_test
-
-imputer = KNNImputer(n_neighbors=2)
-df_train = pd.DataFrame(imputer.fit_transform(df_train))
-df_test = pd.DataFrame(imputer.transform(df_test))
-
-df_train.columns = tmp1.columns
-df_train.index = tmp1.index
-df_test.columns = tmp2.columns
-df_test.index = tmp2.index
+outcome_values = df_train['class'].values
+df_train = df_train.drop(['class'], axis=1)
+df_train.insert(0, 'class', outcome_values, True)
+outcome_values = df_test['class'].values
+df_test = df_test.drop(['class'], axis=1)
+df_test.insert(0, 'class', outcome_values, True)
 
 # remove highly coorelated features
-df_train = df_train.drop(['X212','X094','X109','X213','X273','X096','X095','X138','X121','X107'], axis=1)
-df_test = df_test.drop(['X212','X094','X109','X213','X273','X096','X095','X138','X121','X107'], axis=1)
+df_train = df_train.drop(['X207','X249','X245','X246','X068','X248','X075','X211','X083','X089','X114','X055','X076','X124','X085','X052','X094','X053','X237','X111','X185','X088','X185','X090','X073','X212','X090','X072','X076'], axis=1)
+df_test = df_test.drop(['X207','X249','X245','X246','X068','X248','X075','X211','X083','X089','X114','X055','X076','X124','X085','X052','X094','X053','X237','X111','X185','X088','X185','X090','X073','X212','X090','X072','X076'], axis=1)
 
+# feature selection
+selected_features = stump_selection(0.03, df_train, True)
+df_train = df_train[selected_features]
+df_test = df_test[selected_features]
+
+print('1. n_features = %d' % len(df_train.columns))
+
+# binarizing train and test set
+df_train, df_test, X009 = binarize_limits('X009', df_train, df_test, [-2.5])
+df_train, df_test, X024 = binarize_limits('X024', df_train, df_test, [0.3, 0.1])
+df_train, df_test, X040 = binarize_limits('X040', df_train, df_test, [0.06, 0.3])
+df_train, df_test, X041 = binarize_limits('X041', df_train, df_test, [0, -0.1])
+df_train, df_test, X056 = binarize_limits('X056', df_train, df_test, [-0.1, 2.4])
+df_train, df_test, X065 = binarize_limits('X065', df_train, df_test, [-0.2, -0.05])
+df_train, df_test, X109 = binarize_limits('X109', df_train, df_test, [-0.03, -0.165])
+df_train, df_test, X110 = binarize_limits('X110', df_train, df_test, [-0.09, -0.12])
+df_train, df_test, X113 = binarize_limits('X113', df_train, df_test, [-0.06, 0.3])
+df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [0.1, -0.05])
+df_train, df_test, X149 = binarize_limits('X149', df_train, df_test, [-0.12, 0.12])
+df_train, df_test, X159 = binarize_limits('X159', df_train, df_test, [-0.17, 0.035])
+df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [-0.28, -0.06])
+df_train, df_test, X163 = binarize_limits('X163', df_train, df_test, [0.33, 0.37])
+df_train, df_test, X170 = binarize_limits('X170', df_train, df_test, [-0.18, -0.04, 0.23])
+df_train, df_test, X171 = binarize_limits('X171', df_train, df_test, [0.1, -0.24])
+df_train, df_test, X187 = binarize_limits('X187', df_train, df_test, [-0.23, 0.26, 0.35])
+df_train, df_test, X204 = binarize_limits('X204', df_train, df_test, [-0.29, -0.19, 0.04])
+df_train, df_test, X215 = binarize_limits('X215', df_train, df_test, [-0.2, 0.13, 0.16])
+df_train, df_test, X225 = binarize_limits('X225', df_train, df_test, [-0.1, 0.05, -0.29])
+df_train, df_test, X234 = binarize_limits('X234', df_train, df_test, [-0.17, 0.01])
+df_train, df_test, X244 = binarize_limits('X244', df_train, df_test, [0, -0.24])
+df_train, df_test, X270 = binarize_limits('X270', df_train, df_test, [0.4, 0.16])
+
+print('2. n_features = %d' % len(df_train.columns))
+
+# binary valued feature selection
+selected_features = stump_selection(0.015, df_train, True)
+df_train = df_train[selected_features]
+df_test = df_test[selected_features]
+
+print('3. n_features = %d' % len(df_train.columns))
+
+X009 = fix_names(X009, selected_features)
+X024 = fix_names(X024, selected_features)
+X040 = fix_names(X040, selected_features)
+X041 = fix_names(X041, selected_features)
+X056 = fix_names(X056, selected_features)
+X065 = fix_names(X065, selected_features)
+X109 = fix_names(X109, selected_features)
+X110 = fix_names(X110, selected_features)
+X113 = fix_names(X113, selected_features)
+X144 = fix_names(X144, selected_features)
+X149 = fix_names(X149, selected_features)
+X159 = fix_names(X159, selected_features)
+X162 = fix_names(X162, selected_features)
+X163 = fix_names(X163, selected_features)
+X170 = fix_names(X170, selected_features)
+X171 = fix_names(X171, selected_features)
+X187 = fix_names(X187, selected_features)
+X204 = fix_names(X204, selected_features)
+X215 = fix_names(X215, selected_features)
+X225 = fix_names(X225, selected_features)
+X234 = fix_names(X234, selected_features)
+X244 = fix_names(X244, selected_features)
+X270 = fix_names(X270, selected_features)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
-    'max_L0_value' : 3,                       # maximum model size (set as float(inf))
+    'max_L0_value' : 8,                       # maximum model size (set as float(inf))
     'max_offset' : 50,                        # maximum value of offset parameter (optional)
     'c0_value' : 1e-6,                        # L0-penalty parameter such that c0_value > 0; larger values -> sparser models; we set to a small value (1e-6) so that we get a model with max_L0_value terms
     'w_pos' : 1.00                            # relative weight on examples with y = +1; w_neg = 1.00 (optional)
@@ -167,14 +153,31 @@ settings = {
 }
 
 # operation constraints
-"""op_constraints = {
-    'age_features': age_features,
-    'trestbps_features': trestbps_features,
-    'chol_features': chol_features,
-    'thalach_features': thalach_features,
-    'oldpeak_features': oldpeak_features,
-    'sex_features': sex_features,
-}"""
+op_constraints = {
+    'X009': X009,
+    'X024': X024,
+    'X040': X040,
+    'X041': X041,
+    'X056': X056,
+    'X065': X065,
+    'X109': X109,
+    'X110': X110,
+    'X113': X113,
+    'X144': X144,
+    'X149': X149,
+    'X159': X159,
+    'X162': X162,
+    'X163': X163,
+    'X170': X170,
+    'X171': X171,
+    'X187': X187,
+    'X204': X204,
+    'X215': X215,
+    'X225': X225,
+    'X234': X234,
+    'X244': X244,
+    'X270': X270,
+}
 
 # preparing data
 X_train = df_train.iloc[:,1:].values
@@ -183,9 +186,11 @@ X_test = df_test.iloc[:,1:].values
 y_test = df_test.iloc[:,0].values
 data_headers = df_train.columns
 
+sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+rm = RiskModel(data_headers=data_headers, params=params, settings=settings, sample_weights=sample_weights, op_constraints=op_constraints)
 
 # cross validating
-"""kf = StratifiedKFold(n_splits = n_folds, shuffle = True, random_state = 0)
+kf = StratifiedKFold(n_splits = n_folds, shuffle = True, random_state = 0)
 results = {
     'accuracy': [],
     'build_times': [],
@@ -196,8 +201,6 @@ results = {
     'precision_0': [],
     'f1_1': [],
     'f1_0': [],
-    'f1_macro': [],
-    'f1_micro': [],
 }
 
 for train_index, valid_index in kf.split(X_train, y_train):
@@ -208,40 +211,36 @@ for train_index, valid_index in kf.split(X_train, y_train):
     X_valid_cv = X_train[valid_index]
     y_valid_cv = y_train[valid_index]
 
-    y_pred = OnevsRest_riskslim(df_train[train_index], df_train[valid_index], params, settings)
+    rm.sample_weights = compute_sample_weight(class_weight='balanced', y=y_train_cv)
+    rm.fit(X_train_cv, y_train_cv)
+    y_pred = rm.predict(X_valid_cv)
 
     results['accuracy'].append(accuracy_score(y_valid_cv, y_pred))
-    results['f1_macro'].append(f1_score(y_valid_cv, y_pred, average='macro'))
-    results['f1_micro'].append(f1_score(y_valid_cv, y_pred, average='micro'))
+    results['recall_1'].append(recall_score(y_valid_cv, y_pred, pos_label=1))
+    results['recall_0'].append(recall_score(y_valid_cv, y_pred, pos_label=0))
+    results['precision_1'].append(precision_score(y_valid_cv, y_pred, pos_label=1))
+    results['precision_0'].append(precision_score(y_valid_cv, y_pred, pos_label=0))
+    results['f1_1'].append(f1_score(y_valid_cv, y_pred, pos_label=1))
+    results['f1_0'].append(f1_score(y_valid_cv, y_pred, pos_label=0))
 
-    if not is_multiclass:
+    results['build_times'].append(rm.model_info['solver_time'])
+    results['optimality_gaps'].append(rm.model_info['optimality_gap'])
 
-        results['recall_1'].append(recall_score(y_valid_cv, y_pred, pos_label=1))
-        results['recall_0'].append(recall_score(y_valid_cv, y_pred, pos_label=0))
-        results['precision_1'].append(precision_score(y_valid_cv, y_pred, pos_label=1))
-        results['precision_0'].append(precision_score(y_valid_cv, y_pred, pos_label=0))
-        results['f1_1'].append(f1_score(y_valid_cv, y_pred, pos_label=1))
-        results['f1_0'].append(f1_score(y_valid_cv, y_pred, pos_label=0))
-
-        results['build_times'].append(rm.model_info['solver_time'])
-        results['optimality_gaps'].append(rm.model_info['optimality_gap'])"""
-
+# fitting model
+rm.sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+rm.fit(X_train,y_train)
 
 # print cv results
-"""print(results['accuracy'])
-print_cv_results(results)"""
+print(results['accuracy'])
+print_cv_results(results)
 
 # printing metrics
 print('Testing results:')
-y_pred = OnevsRest_riskslim(df_train, df_test, params, settings)
-
-print(y_pred)
-print(y_test)
-
+y_pred = rm.predict(X_test)
 print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 print("Accuracy = %.3f" % accuracy_score(y_test, y_pred))
-"""print("optimality_gap = %.3f" % rm.model_info['optimality_gap'])
+print("optimality_gap = %.3f" % rm.model_info['optimality_gap'])
 print(sec2time(rm.model_info['solver_time']))
 
 # roc auc
@@ -278,4 +277,12 @@ plt.plot([fpr_risk[op_index]], [tpr_risk[op_index]], marker='o', color='cyan')
 plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend()
-plt.show()"""
+plt.show()
+
+# make result.h5 file save predictions and probabilites
+"""df_results = pd.DataFrame()
+df_results.insert(0, 'risk_pred', y_pred)
+df_results.insert(0, 'risk_prob', y_roc_pred)
+print(df_results)
+df_results.to_hdf('results.h5', key='disease_bin', mode='w')"""
+

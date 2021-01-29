@@ -10,11 +10,6 @@ from sklearn.feature_selection import SelectFromModel
 
 from interpret.glassbox import ExplainableBoostingClassifier
 
-def f7(seq):
-    seen = set()
-    seen_add = seen.add
-    return [x for x in seq if not (x in seen or seen_add(x))]
-
 def ebm_binarization(df_train, df_test, n_features, type='all', feature_names=None):
 
 	headers = df_train.columns[1:].values
@@ -47,7 +42,6 @@ def ebm_binarization(df_train, df_test, n_features, type='all', feature_names=No
 
 	# search limits for each feature
 	for i,feature in enumerate(X_train.columns.values):
-		#print('analyzing = %s' % feature)
 		if feature in names:
 			
 			graph = ebm_global.data(i)
@@ -57,7 +51,7 @@ def ebm_binarization(df_train, df_test, n_features, type='all', feature_names=No
 			limits = []
 
 			# find limits
-			for k in range(0,len(graph['scores'])-step,round(step/4)+1):
+			for k in range(0,len(graph['scores'])-step,round(step/2)):
 
 				#print('k = %d, k+step = %d' % (k, k+step))
 				jump_value = abs(graph['scores'][k] - graph['scores'][k+step])
@@ -65,33 +59,23 @@ def ebm_binarization(df_train, df_test, n_features, type='all', feature_names=No
 				jumps.append(jump_value)
 				limits.append(limit_value)
 
-			if len(limits) != 0:
-				jumps, limits = zip(*sorted(zip(jumps, limits)))
-				jumps = list(jumps)
-				limits = list(limits)
+			jumps, limits = zip(*sorted(zip(jumps, limits)))
 
-				# binarize feature
-				df_train, df_test, bin_features  = binarize_limits(feature, df_train, df_test, limits[-n_features:])	
-				feature_dict[feature] = bin_features
-
-			else:
-				df_train.drop(feature, axis=1, inplace=True)
-				df_test.drop(feature, axis=1, inplace=True)
+			# binarize feature
+			df_train, df_test, bin_features  = binarize_limits(feature, df_train, df_test, list(limits)[-n_features:])	
+			feature_dict[feature] = bin_features
 
 
 	return df_train, df_test, feature_dict
 
 def auto_selection(max_features, df_train, df_test, feature_dict=None):
 
-	df_train = df_train.loc[:,~df_train.columns.duplicated()]
-	df_test = df_test.loc[:,~df_test.columns.duplicated()]
-
 	X_labels = df_train.columns[1:]
 	y_label = df_train.columns[0]
 	X = df_train[X_labels]
 	y = df_train[y_label]
 
-	n = 10000
+	n = 100
 	C = 4.0
 
 	while n > max_features:
@@ -103,11 +87,10 @@ def auto_selection(max_features, df_train, df_test, feature_dict=None):
 		removed_features = np.setdiff1d(X_labels, selected_features)
 
 		n = len(selected_features)
-		C = C*0.8
-		#print('1. n = %d, C = %.4f' % (n,C))
+		C = C*0.7
 	
 	
-	print("Removed stumps1 (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
+	print("Removed stumps (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
 	df_train = df_train[selected_features]
 	df_test = df_test[selected_features]
 
@@ -116,32 +99,6 @@ def auto_selection(max_features, df_train, df_test, feature_dict=None):
 		feature_dict[key] = fix_names(feature_dict[key], selected_features)
 
 	return df_train, df_test, feature_dict
-
-def auto_select(max_features, df_train):
-
-	X_labels = df_train.columns[1:]
-	y_label = df_train.columns[0]
-	X = df_train[X_labels]
-	y = df_train[y_label]
-
-	n = 10000
-	C = 10.0
-
-	while n > max_features:
-
-		selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0))
-		selector.fit(X, y)
-		selected_features = list(X_labels[selector.get_support()])
-		selected_features.insert(0, y_label)
-		removed_features = np.setdiff1d(X_labels, selected_features)
-
-		n = len(selected_features)
-		C = C*0.7
-		print('2. n = %d, C = %.4f' % (n,C))
-	
-	print("Removed stumps2 (%d - %d = %d):\n" % (len(X_labels),len(removed_features), len(X_labels) - len(removed_features)))
-
-	return selected_features
 
 def binarize_limits(feature_name, train_df, test_df, limits):
 
@@ -186,30 +143,6 @@ def sec2time(seconds):
 
 	return '%dh %dmin %dsec' % (hours, minutes, secs)
 
-def riskslim_cv(n_fold, rm, X, y):
-
-	cv = StratifiedKFold(n_splits=n_fold)
-	classifier = rm
-
-	accs = []
-	build_times = []
-	optimality_gaps = []
-
-	for i, (train, test) in enumerate(cv.split(X, y)):
-
-		classifier.threshold = 0.5
-		classifier.fit(X[train], y[train])
-		y_pred = classifier.predict(X[test])
-		accs.append(accuracy_score(y[test], y_pred))
-		build_times.append(classifier.model_info['solver_time'])
-		optimality_gaps.append(classifier.model_info['optimality_gap'])
-
-	accs = np.array(accs)
-	build_times = np.array(build_times)
-	optimality_gaps = np.array(optimality_gaps)
-
-	return accs, build_times, optimality_gaps
-
 def find_treshold_index(tresholds, my_treshold):
 
     index = 0
@@ -218,20 +151,24 @@ def find_treshold_index(tresholds, my_treshold):
 
         d = abs(my_treshold - t)
 
-        if d < smallest_d:
+        if d < smallest_d and t > my_treshold:
             smallest_d = d
             index = i
 
     return index
 
-def stump_selection(C, train_df):
+def stump_selection(C, train_df, weighted):
 
 	X_labels = train_df.columns[1:]
 	y_label = train_df.columns[0]
 	X = train_df[X_labels]
 	y = train_df[y_label]
 
-	selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0))
+	if weighted:
+		selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0, class_weight='balanced'))
+	else:
+		selector = SelectFromModel(LogisticRegression(solver='liblinear', C=C, penalty='l1', random_state=0))
+
 	selector.fit(X, y)
 	selected_features = list(X_labels[selector.get_support()])
 	selected_features.insert(0, y_label)

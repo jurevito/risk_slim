@@ -15,9 +15,9 @@ from riskslim.lattice_cpa import setup_lattice_cpa, finish_lattice_cpa, run_latt
 
 class RiskModel(BaseEstimator):
 
-    def __init__(self, sample_weights_csv_file = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False, threshold = 0.5, op_constraints = None):
+    def __init__(self, sample_weights = None, data_headers = None, fold_csv_file = None, params = None, settings = None, show_omitted_variables = False, threshold = 0.5, op_constraints = None):
 
-        self.sample_weights_csv_file = sample_weights_csv_file
+        self.sample_weights = sample_weights
         self.data_headers = data_headers
         self.fold_csv_file = fold_csv_file
         self.settings = settings
@@ -58,21 +58,17 @@ class RiskModel(BaseEstimator):
         X = np.insert(arr=X, obj=0, values=np.ones(N), axis=1)
         variable_names.insert(0, '(Intercept)')
 
-        if self.sample_weights_csv_file is None:
-            sample_weights = np.ones(N)
-        else:
-            if os.path.isfile(self.sample_weights_csv_file):
-                sample_weights = pd.read_csv(self.sample_weights_csv_file, sep=',', header=None)
-                sample_weights = sample_weights.as_matrix()
-            else:
-                raise IOError('could not find sample_weights_csv_file: %s' % self.sample_weights_csv_file)
+        if self.sample_weights is None:
+            self.sample_weights = np.ones(N)
+        elif len(self.sample_weights) != N:
+            raise IOError('Sample weight length %d mismatch X length %d' % (len(self.sample_weights),N))
 
         self.data = {
             'X': X,
             'Y': Y,
             'variable_names': variable_names,
             'outcome_name': Y_name,
-            'sample_weights': sample_weights,
+            'sample_weights': self.sample_weights,
         }
 
         #load folds
@@ -181,7 +177,7 @@ class RiskModel(BaseEstimator):
         y = np.array(scores)
 
         for i,score in enumerate(scores):
-            y[i] = round(float(1.0/(1.0 + math.exp(-(self.intercept_val + score)))) - self.threshold + 0.5)
+            y[i] = round(float(1.0/(1.0 + math.exp(-(self.intercept_val + score)))) - self.threshold + 0.50001)
 
         return y
 
