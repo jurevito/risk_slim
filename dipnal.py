@@ -21,7 +21,7 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.metrics import precision_recall_curve, average_precision_score
 from sklearn.utils.class_weight import compute_sample_weight
 
-from preprocess import binarize_limits, sec2time, find_treshold_index, stump_selection, fix_names, print_cv_results, binarize_sex
+from preprocess import binarize_limits, sec2time, find_treshold_index, stump_selection, fix_names, print_cv_results, binarize_sex, impute_dataframes
 from prettytable import PrettyTable
 
 from imblearn.combine import SMOTEENN
@@ -30,92 +30,65 @@ import time
 
 # setup variables
 output_file = open('result.txt', 'w+')
-file = 'disease_bin_imputed.h5'
+file = 'diabetes.csv'
 test_size = 0.2
 n_folds = 5
-max_runtime = 10.0
+max_runtime = 1.0
 
 os.chdir('..')
 path = os.getcwd() + '/risk-slim/examples/data/' + file
-df_train = pd.read_hdf(path, 'train')
-df_test = pd.read_hdf(path, 'test')
+df  = pd.read_csv(path, float_precision='round_trip')
+
+# 0 to nan
+df['Glucose'] = df['Glucose'].replace(0, np.nan)
+df['BloodPressure'] = df['BloodPressure'].replace(0, np.nan)
+df['SkinThickness'] = df['SkinThickness'].replace(0, np.nan)
+df['Insulin'] = df['Insulin'].replace(0, np.nan)
+df['BMI'] = df['BMI'].replace(0, np.nan)
+df['DiabetesPedigreeFunction'] = df['DiabetesPedigreeFunction'].replace(0, np.nan)
+
+# split data
+df = shuffle(df, random_state=1)
+df_train, df_test = train_test_split(df, test_size=test_size, random_state=0, stratify=df['Outcome'])
+
+# data imputation
+df_train, df_test = impute_dataframes(df_train, df_test)
 
 # move outcome at beginning
-outcome_values = df_train['class'].values
-df_train = df_train.drop(['class'], axis=1)
-df_train.insert(0, 'class', outcome_values, True)
-outcome_values = df_test['class'].values
-df_test = df_test.drop(['class'], axis=1)
-df_test.insert(0, 'class', outcome_values, True)
+outcome_values = df_train['Outcome'].values
+df_train = df_train.drop(['Outcome'], axis=1)
+df_train.insert(0, 'Outcome', outcome_values, True)
+outcome_values = df_test['Outcome'].values
+df_test = df_test.drop(['Outcome'], axis=1)
+df_test.insert(0, 'Outcome', outcome_values, True)
 
-# remove highly coorelated features
-df_train = df_train.drop(['X207','X249','X245','X246','X068','X248','X075','X211','X083','X089','X114','X055','X076','X124','X085','X052','X094','X053','X237','X111','X185','X088','X185','X090','X073','X212','X090','X072','X076'], axis=1)
-df_test = df_test.drop(['X207','X249','X245','X246','X068','X248','X075','X211','X083','X089','X114','X055','X076','X124','X085','X052','X094','X053','X237','X111','X185','X088','X185','X090','X073','X212','X090','X072','X076'], axis=1)
-
-# feature selection
-selected_features = stump_selection(0.03, df_train, True)
-df_train = df_train[selected_features]
-df_test = df_test[selected_features]
+# binarizing train and test set
+df_train, df_test, Pregnancies = binarize_limits('Pregnancies', df_train, df_test, [6, 13])
+df_train, df_test, Glucose = binarize_limits('Glucose', df_train, df_test, [155, 168, 120, 130])
+df_train, df_test, BloodPressure = binarize_limits('BloodPressure', df_train, df_test, [55, 92, 100])
+df_train, df_test, SkinThickness = binarize_limits('SkinThickness', df_train, df_test, [15, 22, 32, 48])
+df_train, df_test, Insulin = binarize_limits('Insulin', df_train, df_test, [78, 130, 330])
+df_train, df_test, BMI = binarize_limits('BMI', df_train, df_test, [25, 48])
+df_train, df_test, DiabetesPedigreeFunction = binarize_limits('DiabetesPedigreeFunction', df_train, df_test, [1.35, 0.19])
+df_train, df_test, Age = binarize_limits('Age', df_train, df_test, [63, 42, 23, 28, 53])
 
 print('1. n_features = %d' % len(df_train.columns))
 
-# binarizing train and test set
-df_train, df_test, X009 = binarize_limits('X009', df_train, df_test, [-2.5])
-df_train, df_test, X024 = binarize_limits('X024', df_train, df_test, [0.3, 0.1])
-df_train, df_test, X040 = binarize_limits('X040', df_train, df_test, [0.06, 0.3])
-df_train, df_test, X041 = binarize_limits('X041', df_train, df_test, [0, -0.1])
-df_train, df_test, X056 = binarize_limits('X056', df_train, df_test, [-0.1, 2.4])
-df_train, df_test, X065 = binarize_limits('X065', df_train, df_test, [-0.2, -0.05])
-df_train, df_test, X109 = binarize_limits('X109', df_train, df_test, [-0.03, -0.165])
-df_train, df_test, X110 = binarize_limits('X110', df_train, df_test, [-0.09, -0.12])
-df_train, df_test, X113 = binarize_limits('X113', df_train, df_test, [-0.06, 0.3])
-df_train, df_test, X144 = binarize_limits('X144', df_train, df_test, [0.1, -0.05])
-df_train, df_test, X149 = binarize_limits('X149', df_train, df_test, [-0.12, 0.12])
-df_train, df_test, X159 = binarize_limits('X159', df_train, df_test, [-0.17, 0.035])
-df_train, df_test, X162 = binarize_limits('X162', df_train, df_test, [-0.28, -0.06])
-df_train, df_test, X163 = binarize_limits('X163', df_train, df_test, [0.33, 0.37])
-df_train, df_test, X170 = binarize_limits('X170', df_train, df_test, [-0.18, -0.04, 0.23])
-df_train, df_test, X171 = binarize_limits('X171', df_train, df_test, [0.1, -0.24])
-df_train, df_test, X187 = binarize_limits('X187', df_train, df_test, [-0.23, 0.26, 0.35])
-df_train, df_test, X204 = binarize_limits('X204', df_train, df_test, [-0.29, -0.19, 0.04])
-df_train, df_test, X215 = binarize_limits('X215', df_train, df_test, [-0.2, 0.13, 0.16])
-df_train, df_test, X225 = binarize_limits('X225', df_train, df_test, [-0.1, 0.05, -0.29])
-df_train, df_test, X234 = binarize_limits('X234', df_train, df_test, [-0.17, 0.01])
-df_train, df_test, X244 = binarize_limits('X244', df_train, df_test, [0, -0.24])
-df_train, df_test, X270 = binarize_limits('X270', df_train, df_test, [0.4, 0.16])
-
-print('2. n_features = %d' % len(df_train.columns))
-
 # binary valued feature selection
-selected_features = stump_selection(0.015, df_train, True)
+selected_features = stump_selection(0.8, df_train, False)
 df_train = df_train[selected_features]
 df_test = df_test[selected_features]
 
-print('3. n_features = %d' % len(df_train.columns))
+print('2. n_features = %d' % len(df_train.columns))
 
-X009 = fix_names(X009, selected_features)
-X024 = fix_names(X024, selected_features)
-X040 = fix_names(X040, selected_features)
-X041 = fix_names(X041, selected_features)
-X056 = fix_names(X056, selected_features)
-X065 = fix_names(X065, selected_features)
-X109 = fix_names(X109, selected_features)
-X110 = fix_names(X110, selected_features)
-X113 = fix_names(X113, selected_features)
-X144 = fix_names(X144, selected_features)
-X149 = fix_names(X149, selected_features)
-X159 = fix_names(X159, selected_features)
-X162 = fix_names(X162, selected_features)
-X163 = fix_names(X163, selected_features)
-X170 = fix_names(X170, selected_features)
-X171 = fix_names(X171, selected_features)
-X187 = fix_names(X187, selected_features)
-X204 = fix_names(X204, selected_features)
-X215 = fix_names(X215, selected_features)
-X225 = fix_names(X225, selected_features)
-X234 = fix_names(X234, selected_features)
-X244 = fix_names(X244, selected_features)
-X270 = fix_names(X270, selected_features)
+Pregnancies = fix_names(Pregnancies, selected_features)
+Glucose = fix_names(Glucose, selected_features)
+BloodPressure = fix_names(BloodPressure, selected_features)
+SkinThickness = fix_names(SkinThickness, selected_features)
+Insulin = fix_names(Insulin, selected_features)
+BMI = fix_names(BMI, selected_features)
+DiabetesPedigreeFunction = fix_names(DiabetesPedigreeFunction, selected_features)
+Age = fix_names(Age, selected_features)
 
 params = {
     'max_coefficient' : 6,                    # value of largest/smallest coefficient
@@ -154,30 +127,16 @@ settings = {
 
 # operation constraints
 op_constraints = {
-    'X009': X009,
-    'X024': X024,
-    'X040': X040,
-    'X041': X041,
-    'X056': X056,
-    'X065': X065,
-    'X109': X109,
-    'X110': X110,
-    'X113': X113,
-    'X144': X144,
-    'X149': X149,
-    'X159': X159,
-    'X162': X162,
-    'X163': X163,
-    'X170': X170,
-    'X171': X171,
-    'X187': X187,
-    'X204': X204,
-    'X215': X215,
-    'X225': X225,
-    'X234': X234,
-    'X244': X244,
-    'X270': X270,
+    'Pregnancies': Pregnancies,
+    'Glucose': Glucose,
+    'BloodPressure': BloodPressure,
+    'SkinThickness': SkinThickness,
+    'Insulin': Insulin,
+    'BMI': BMI,
+    'DiabetesPedigreeFunction': DiabetesPedigreeFunction,
+    'Age': Age,
 }
+
 
 # preparing data
 X_train = df_train.iloc[:,1:].values
@@ -186,8 +145,7 @@ X_test = df_test.iloc[:,1:].values
 y_test = df_test.iloc[:,0].values
 data_headers = df_train.columns
 
-sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
-rm = RiskModel(data_headers=data_headers, params=params, settings=settings, sample_weights=sample_weights, op_constraints=op_constraints)
+rm = RiskModel(data_headers=data_headers, params=params, settings=settings, op_constraints=op_constraints)
 
 # cross validating
 kf = StratifiedKFold(n_splits = n_folds, shuffle = True, random_state = 0)
@@ -211,7 +169,6 @@ for train_index, valid_index in kf.split(X_train, y_train):
     X_valid_cv = X_train[valid_index]
     y_valid_cv = y_train[valid_index]
 
-    rm.sample_weights = compute_sample_weight(class_weight='balanced', y=y_train_cv)
     rm.fit(X_train_cv, y_train_cv)
     y_pred = rm.predict(X_valid_cv)
 
@@ -227,7 +184,6 @@ for train_index, valid_index in kf.split(X_train, y_train):
     results['optimality_gaps'].append(rm.model_info['optimality_gap'])
 
 # fitting model
-rm.sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
 rm.fit(X_train,y_train)
 
 # print cv results
@@ -278,11 +234,4 @@ plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend()
 plt.show()
-
-# make result.h5 file save predictions and probabilites
-"""df_results = pd.DataFrame()
-df_results.insert(0, 'risk_pred', y_pred)
-df_results.insert(0, 'risk_prob', y_roc_pred)
-print(df_results)
-df_results.to_hdf('results.h5', key='disease_bin', mode='w')"""
 

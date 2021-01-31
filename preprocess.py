@@ -7,6 +7,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import Lasso, LogisticRegression
 from sklearn.feature_selection import SelectFromModel
+from sklearn.impute import KNNImputer
 
 from interpret.glassbox import ExplainableBoostingClassifier
 
@@ -224,6 +225,31 @@ def binarize_sex(feature_name, class1_name, class2_name, df_train, df_test):
 	df_test.insert(index+1, class2_name, data_test, True)
 
 	return df_train, df_test, [class1_name, class2_name]
+
+def impute_dataframes(df_train, df_test):
+
+    X_train = df_train.iloc[:, :-1].values
+    y_train = df_train.iloc[:, -1].values
+    X_test = df_test.iloc[:, :-1].values
+    y_test = df_test.iloc[:, -1].values
+
+    imputer = KNNImputer(n_neighbors=2)
+    X_train = imputer.fit_transform(X_train)
+    X_test = imputer.transform(X_test)
+
+    tmp_train = np.append(X_train, np.reshape(y_train, (-1, 1)), axis=1)
+    tmp_test = np.append(X_test, np.reshape(y_test, (-1, 1)), axis=1)
+
+    df_train_imputed = pd.DataFrame(tmp_train)
+    df_test_imputed = pd.DataFrame(tmp_test)
+
+    df_train_imputed.columns = df_train.columns
+    df_test_imputed.columns = df_test.columns
+
+    df_train = df_train_imputed
+    df_test = df_test_imputed
+
+    return df_train, df_test
 
 if __name__ == "__main__":
 

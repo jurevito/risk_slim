@@ -57,11 +57,9 @@ class RiskModel(BaseEstimator):
         # insert a column of ones to X for the intercept
         X = np.insert(arr=X, obj=0, values=np.ones(N), axis=1)
         variable_names.insert(0, '(Intercept)')
-
-        if self.sample_weights is None:
+ 
+        if self.sample_weights is None or len(self.sample_weights) != N:
             self.sample_weights = np.ones(N)
-        elif len(self.sample_weights) != N:
-            raise IOError('Sample weight length %d mismatch X length %d' % (len(self.sample_weights),N))
 
         self.data = {
             'X': X,
